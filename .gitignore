@@ -1,0 +1,15 @@
+# Backend
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/livedesk.db
+backend/.env
+backend/venv/
+backend/.venv/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+.DS_Store

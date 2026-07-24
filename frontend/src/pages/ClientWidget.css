@@ -1,0 +1,208 @@
+.widget-stage {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(79, 209, 197, 0.10), transparent 45%),
+    var(--bg);
+  padding-bottom: 120px;
+}
+
+.widget-stage__hint {
+  position:absolute;
+  top: var(--space-3);
+  right: var(--space-4);
+  color: var(--text-faint);
+  font-size: 11px;
+  z-index: 1;
+}
+
+/* ---- fictional site chrome, just to give the widget a home ---- */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header__logo {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.site-header__nav {
+  display: flex;
+  gap: var(--space-5);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.site-hero {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+  padding: var(--space-6) var(--space-4) var(--space-5);
+}
+
+.site-hero h1 {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1.15;
+  margin: 0 0 var(--space-3);
+}
+
+.site-hero p {
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 var(--space-5);
+}
+
+.site-hero__cta {
+  background: var(--signal);
+  color: #06201d;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-5);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.site-features {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 var(--space-4) var(--space-6);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.feature-card h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  margin: 0 0 var(--space-2);
+}
+
+.feature-card p {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ---- support CTA: the thing that must not go unnoticed ---- */
+
+.support-callout {
+  position: fixed;
+  bottom: var(--space-5);
+  right: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  z-index: 2;
+}
+
+.support-callout__bubble {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px var(--space-3);
+  font-size: 12px;
+  color: var(--text-muted);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.widget-launcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--signal);
+  color: #06201d;
+  border: none;
+  padding: var(--space-3) var(--space-5);
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0 10px 30px rgba(79, 209, 197, 0.35);
+}
+
+.widget-launcher::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 1.5px solid var(--signal);
+  opacity: 0.6;
+  animation: launcher-pulse 2.2s ease-out infinite;
+}
+
+@keyframes launcher-pulse {
+  0% { transform: scale(0.92); opacity: 0.6; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .widget-launcher::before {
+    animation: none;
+    display: none;
+  }
+}
+
+.widget-window {
+  position: fixed;
+  bottom: 100px;
+  right: var(--space-5);
+  width: 340px;
+  height: 460px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+.widget-window__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.widget-window__header button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.widget-window__body {
+  flex: 1;
+  min-height: 0;
+}
+
+.widget-window__loading {
+  padding: var(--space-4);
+  color: var(--text-faint);
+}

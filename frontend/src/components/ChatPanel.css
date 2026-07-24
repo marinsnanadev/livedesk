@@ -1,0 +1,107 @@
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface);
+}
+
+.chat-panel__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-panel__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.chat-panel__empty {
+  color: var(--text-faint);
+  font-size: 13px;
+  margin: auto;
+}
+
+.bubble {
+  max-width: 78%;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.bubble p {
+  margin: var(--space-1) 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble__meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.bubble--mine {
+  align-self: flex-end;
+  border-color: var(--signal-dim);
+  background: rgba(79, 209, 197, 0.08);
+}
+
+.bubble--theirs {
+  align-self: flex-start;
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding-left: var(--space-2);
+}
+
+.chat-panel__composer {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.chat-panel__composer textarea {
+  flex: 1;
+  resize: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+  font-size: 14px;
+  min-height: 20px;
+}
+
+.chat-panel__send {
+  background: var(--signal);
+  color: #06201d;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-4);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.chat-panel__send:disabled {
+  background: var(--surface-raised);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}

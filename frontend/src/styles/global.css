@@ -1,0 +1,100 @@
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--signal-dim);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* Signature element: a pulsing status dot used everywhere presence
+   matters — sidebar rows, chat header, widget launcher. Reduced-motion
+   users get a solid dot instead of the pulse. */
+.status-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: var(--signal);
+}
+
+.status-dot.online::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--signal);
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+
+.status-dot.typing {
+  background: var(--attention);
+}
+
+.status-dot.typing::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--attention);
+  animation: pulse-ring 1s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot.online::after,
+  .status-dot.typing::after {
+    animation: none;
+    display: none;
+  }
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}

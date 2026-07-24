@@ -1,0 +1,39 @@
+/*
+  LiveDesk design tokens.
+
+  Direction: an "operator console" feel — this is a tool for watching
+  live signals (who's online, who's typing) not a marketing page, so
+  the palette leans instrument panel rather than warm/friendly SaaS.
+  Ink teal base, cyan for "connected/live", amber for "attention/typing".
+  Mono type surfaces anywhere state is reported, echoing a console readout.
+*/
+:root {
+  --bg: #0f1417;
+  --surface: #161d21;
+  --surface-raised: #1c252a;
+  --border: #263136;
+
+  --text: #e8edef;
+  --text-muted: #8ca0a8;
+  --text-faint: #56666c;
+
+  --signal: #4fd1c5;      /* connected / online / sent by you */
+  --signal-dim: #2e6b64;
+  --attention: #f2b84b;   /* typing / unread */
+  --danger: #e2685c;
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+}
