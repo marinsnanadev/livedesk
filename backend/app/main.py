@@ -52,6 +52,47 @@ def get_messages(conversation_id: str, db: Session = Depends(get_db)):
     return convo.messages
 
 
+@app.patch("/api/conversations/{conversation_id}", response_model=schemas.ConversationOut)
+async def update_conversation(
+    conversation_id: str, payload: schemas.ConversationUpdate, db: Session = Depends(get_db)
+):
+    convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+
+    if "status" in updates and updates["status"] is not None:
+        try:
+            convo.status = models.ConversationStatus(updates["status"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid status")
+
+    if "priority" in updates and updates["priority"] is not None:
+        try:
+            convo.priority = models.ConversationPriority(updates["priority"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid priority")
+
+    if "assigned_to" in updates:
+        convo.assigned_to = updates["assigned_to"]
+
+    db.commit()
+    db.refresh(convo)
+
+    # So a second agent looking at the same ticket sees the change live,
+    # instead of only finding out on their next full page load.
+    await manager.broadcast(AGENTS_ROOM, {
+        "type": "ticket_updated",
+        "conversation_id": convo.id,
+        "status": convo.status.value,
+        "priority": convo.priority.value,
+        "assigned_to": convo.assigned_to,
+    })
+
+    return convo
+
+
 # ---------- WebSocket: the live layer ----------
 #
 # Two kinds of sockets:

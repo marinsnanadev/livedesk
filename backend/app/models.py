@@ -18,7 +18,15 @@ def new_id() -> str:
 
 class ConversationStatus(str, enum.Enum):
     open = "open"
-    closed = "closed"
+    in_progress = "in_progress"
+    resolved = "resolved"
+
+
+class ConversationPriority(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    urgent = "urgent"
 
 
 class SenderRole(str, enum.Enum):
@@ -32,6 +40,8 @@ class Conversation(Base):
     id = Column(String, primary_key=True, default=new_id)
     client_name = Column(String, nullable=False, default="Visitor")
     status = Column(SAEnum(ConversationStatus), default=ConversationStatus.open, nullable=False)
+    priority = Column(SAEnum(ConversationPriority), default=ConversationPriority.medium, nullable=False)
+    assigned_to = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     messages = relationship("Message", back_populates="conversation", order_by="Message.created_at")
