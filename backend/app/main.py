@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import os
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
@@ -13,6 +14,15 @@ from .connection_manager import manager, AGENTS_ROOM
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="LiveDesk API")
+
+# Gate for role=agent on the websocket handshake — without this, anyone
+# who knows the URL shape can open a socket as an "agent" and read every
+# conversation. Not real auth (no per-agent identity, one shared secret),
+# but it closes the obvious hole for a demo project. Set AGENT_TOKEN in
+# your environment/.env for anything beyond local testing.
+AGENT_TOKEN = os.getenv("AGENT_TOKEN", "dev-only-agent-token")
+if AGENT_TOKEN == "dev-only-agent-token":
+    print("[livedesk] WARNING: using the default AGENT_TOKEN — set your own via env for anything beyond local dev.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -104,7 +114,11 @@ async def update_conversation(
 # is never inconsistent with what was shown live.
 
 @app.websocket("/ws/agents")
-async def agents_feed(websocket: WebSocket, name: str = "Agent"):
+async def agents_feed(websocket: WebSocket, name: str = "Agent", token: str = ""):
+    if token != AGENT_TOKEN:
+        await websocket.close(code=4401)
+        return
+
     await manager.connect(websocket, AGENTS_ROOM, role="agent", name=name)
     try:
         while True:
@@ -114,7 +128,17 @@ async def agents_feed(websocket: WebSocket, name: str = "Agent"):
 
 
 @app.websocket("/ws/conversations/{conversation_id}")
-async def conversation_room(websocket: WebSocket, conversation_id: str, role: str = "client", name: str = "Visitor"):
+async def conversation_room(
+    websocket: WebSocket,
+    conversation_id: str,
+    role: str = "client",
+    name: str = "Visitor",
+    token: str = "",
+):
+    if role == "agent" and token != AGENT_TOKEN:
+        await websocket.close(code=4401)
+        return
+
     db = next(get_db())
     convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
     if not convo:

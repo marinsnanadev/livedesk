@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi.testclient import TestClient
-from app.main import app
+from app.main import app, AGENT_TOKEN
 
 client = TestClient(app)
 
@@ -36,7 +36,7 @@ def test_message_round_trip_over_websocket():
     convo_id = _create_conversation("Maria")
 
     with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Maria") as client_ws, \
-         client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Nana") as agent_ws:
+         client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Nana&token={AGENT_TOKEN}") as agent_ws:
 
         client_ws.send_json({"type": "message", "body": "Hi, I need help"})
 
@@ -58,7 +58,7 @@ def test_typing_event_is_not_persisted():
     convo_id = _create_conversation("Joao")
 
     with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Joao") as client_ws, \
-         client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Nana") as agent_ws:
+         client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Nana&token={AGENT_TOKEN}") as agent_ws:
 
         client_ws.send_json({"type": "typing", "is_typing": True})
         event = agent_ws.receive_json()
@@ -112,7 +112,7 @@ def test_update_ticket_rejects_invalid_status():
 def test_update_ticket_broadcasts_to_agents_feed():
     convo_id = _create_conversation("Broadcast Ticket")
 
-    with client.websocket_connect("/ws/agents?name=Watcher") as agents_ws:
+    with client.websocket_connect(f"/ws/agents?name=Watcher&token={AGENT_TOKEN}") as agents_ws:
         client.patch(f"/api/conversations/{convo_id}", json={"priority": "high"})
         event = agents_ws.receive_json()
 
@@ -124,3 +124,36 @@ def test_update_ticket_broadcasts_to_agents_feed():
 def test_update_conversation_404_for_unknown_id():
     resp = client.patch("/api/conversations/does-not-exist", json={"priority": "high"})
     assert resp.status_code == 404
+
+
+def test_agents_feed_rejects_missing_or_wrong_token():
+    from starlette.websockets import WebSocketDisconnect
+
+    try:
+        with client.websocket_connect("/ws/agents?name=Intruder"):
+            assert False, "should have been rejected without a token"
+    except WebSocketDisconnect as exc:
+        assert exc.code == 4401
+
+    try:
+        with client.websocket_connect("/ws/agents?name=Intruder&token=totally-wrong"):
+            assert False, "should have been rejected with a wrong token"
+    except WebSocketDisconnect as exc:
+        assert exc.code == 4401
+
+
+def test_conversation_room_rejects_agent_role_without_token():
+    from starlette.websockets import WebSocketDisconnect
+
+    convo_id = _create_conversation("Guarded Room")
+    try:
+        with client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Intruder"):
+            assert False, "should have been rejected without a token"
+    except WebSocketDisconnect as exc:
+        assert exc.code == 4401
+
+
+def test_conversation_room_still_allows_client_role_without_token():
+    convo_id = _create_conversation("Open To Clients")
+    with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Visitor"):
+        pass  # connecting without raising is the assertion — clients never needed a token
