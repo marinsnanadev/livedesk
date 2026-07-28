@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,13 @@ app = FastAPI(title="LiveDesk API")
 AGENT_TOKEN = os.getenv("AGENT_TOKEN", "dev-only-agent-token")
 if AGENT_TOKEN == "dev-only-agent-token":
     print("[livedesk] WARNING: using the default AGENT_TOKEN — set your own via env for anything beyond local dev.")
+
+
+def require_agent_token(x_agent_token: str = Header(default="")) -> None:
+    """Same shared secret as the websocket handshake, applied to REST
+    endpoints that act with agent privileges (e.g. updating a ticket)."""
+    if x_agent_token != AGENT_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid or missing agent token")
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,7 +69,7 @@ def get_messages(conversation_id: str, db: Session = Depends(get_db)):
     return convo.messages
 
 
-@app.patch("/api/conversations/{conversation_id}", response_model=schemas.ConversationOut)
+@app.patch("/api/conversations/{conversation_id}", response_model=schemas.ConversationOut, dependencies=[Depends(require_agent_token)])
 async def update_conversation(
     conversation_id: str, payload: schemas.ConversationUpdate, db: Session = Depends(get_db)
 ):

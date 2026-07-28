@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.main import app, AGENT_TOKEN
 
 client = TestClient(app)
+AGENT_HEADERS = {"X-Agent-Token": AGENT_TOKEN}
 
 
 def _create_conversation(name="Test Visitor"):
@@ -83,6 +84,7 @@ def test_update_ticket_persists_across_requests():
     resp = client.patch(
         f"/api/conversations/{convo_id}",
         json={"status": "in_progress", "priority": "urgent", "assigned_to": "Nana"},
+        headers=AGENT_HEADERS,
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -101,7 +103,7 @@ def test_update_ticket_persists_across_requests():
 
 def test_update_ticket_rejects_invalid_status():
     convo_id = _create_conversation("Bad Status")
-    resp = client.patch(f"/api/conversations/{convo_id}", json={"status": "not_a_real_status"})
+    resp = client.patch(f"/api/conversations/{convo_id}", json={"status": "not_a_real_status"}, headers=AGENT_HEADERS)
     assert resp.status_code == 422
 
     # Confirms the rejected update didn't slip through before validation failed.
@@ -113,7 +115,7 @@ def test_update_ticket_broadcasts_to_agents_feed():
     convo_id = _create_conversation("Broadcast Ticket")
 
     with client.websocket_connect(f"/ws/agents?name=Watcher&token={AGENT_TOKEN}") as agents_ws:
-        client.patch(f"/api/conversations/{convo_id}", json={"priority": "high"})
+        client.patch(f"/api/conversations/{convo_id}", json={"priority": "high"}, headers=AGENT_HEADERS)
         event = agents_ws.receive_json()
 
         assert event["type"] == "ticket_updated"
@@ -122,8 +124,18 @@ def test_update_ticket_broadcasts_to_agents_feed():
 
 
 def test_update_conversation_404_for_unknown_id():
-    resp = client.patch("/api/conversations/does-not-exist", json={"priority": "high"})
+    resp = client.patch("/api/conversations/does-not-exist", json={"priority": "high"}, headers=AGENT_HEADERS)
     assert resp.status_code == 404
+
+
+def test_update_conversation_rejects_missing_agent_token():
+    convo_id = _create_conversation("Unauthorized Patch")
+    resp = client.patch(f"/api/conversations/{convo_id}", json={"priority": "urgent"})
+    assert resp.status_code == 401
+
+    # Confirms the rejected request never touched the row.
+    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    assert convo["priority"] == "medium"
 
 
 def test_agents_feed_rejects_missing_or_wrong_token():
