@@ -67,3 +67,60 @@ def test_typing_event_is_not_persisted():
 
     history = client.get(f"/api/conversations/{convo_id}/messages").json()
     assert history == []
+
+
+def test_new_conversation_has_ticket_defaults():
+    convo_id = _create_conversation("Default Ticket")
+    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    assert convo["status"] == "open"
+    assert convo["priority"] == "medium"
+    assert convo["assigned_to"] is None
+
+
+def test_update_ticket_persists_across_requests():
+    convo_id = _create_conversation("Persisted Ticket")
+
+    resp = client.patch(
+        f"/api/conversations/{convo_id}",
+        json={"status": "in_progress", "priority": "urgent", "assigned_to": "Nana"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "in_progress"
+    assert body["priority"] == "urgent"
+    assert body["assigned_to"] == "Nana"
+
+    # Bug this guards against: if the endpoint updated its own in-memory
+    # object but never called db.commit(), this second, independent
+    # request would still read back the old defaults.
+    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    assert convo["status"] == "in_progress"
+    assert convo["priority"] == "urgent"
+    assert convo["assigned_to"] == "Nana"
+
+
+def test_update_ticket_rejects_invalid_status():
+    convo_id = _create_conversation("Bad Status")
+    resp = client.patch(f"/api/conversations/{convo_id}", json={"status": "not_a_real_status"})
+    assert resp.status_code == 422
+
+    # Confirms the rejected update didn't slip through before validation failed.
+    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    assert convo["status"] == "open"
+
+
+def test_update_ticket_broadcasts_to_agents_feed():
+    convo_id = _create_conversation("Broadcast Ticket")
+
+    with client.websocket_connect("/ws/agents?name=Watcher") as agents_ws:
+        client.patch(f"/api/conversations/{convo_id}", json={"priority": "high"})
+        event = agents_ws.receive_json()
+
+        assert event["type"] == "ticket_updated"
+        assert event["conversation_id"] == convo_id
+        assert event["priority"] == "high"
+
+
+def test_update_conversation_404_for_unknown_id():
+    resp = client.patch("/api/conversations/does-not-exist", json={"priority": "high"})
+    assert resp.status_code == 404
