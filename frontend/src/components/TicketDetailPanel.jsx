@@ -26,9 +26,9 @@ export default function TicketDetailPanel({ conversation, openedLabel, onChange 
         <label className="ticket-panel__label" htmlFor="ticket-status">Status</label>
         <select
           id="ticket-status"
-          className={`ticket-panel__select ticket-panel__select--status-${conversation.ticketStatus}`}
-          value={conversation.ticketStatus}
-          onChange={(e) => onChange({ ticketStatus: e.target.value })}
+          className={`ticket-panel__select ticket-panel__select--status-${conversation.status}`}
+          value={conversation.status}
+          onChange={(e) => onChange({ status: e.target.value })}
         >
           {STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -52,7 +52,7 @@ export default function TicketDetailPanel({ conversation, openedLabel, onChange 
 
       <div className="ticket-panel__section">
         <span className="ticket-panel__label">Assigned to</span>
-        <p className="ticket-panel__value">{conversation.assignedTo || 'Nobody yet'}</p>
+        <p className="ticket-panel__value">{conversation.assigned_to || 'Nobody yet'}</p>
       </div>
     </aside>
   )

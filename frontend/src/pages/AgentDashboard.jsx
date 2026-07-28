@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { listConversations, WS_BASE } from '../api'
+import { listConversations, updateConversation, WS_BASE } from '../api'
 import ChatPanel from '../components/ChatPanel'
 import TicketDetailPanel from '../components/TicketDetailPanel'
 import './AgentDashboard.css'
 
 const AGENT_NAME = 'Nana'
-
-// NOTE: ticketStatus / priority / assignedTo are LOCAL-ONLY for now —
-// the backend doesn't persist these fields yet. They live in this
-// component's state so we can shape the UI before touching the schema.
-// Once the direction is approved, these move into the Conversation
-// model on the backend and get loaded from the API instead of defaulted
-// here.
-const DEFAULT_TICKET_FIELDS = { ticketStatus: 'open', priority: 'medium', assignedTo: null }
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -21,7 +13,7 @@ const FILTERS = [
 ]
 
 function matchesFilter(convo, filterKey) {
-  if (filterKey === 'unassigned') return !convo.assignedTo
+  if (filterKey === 'unassigned') return !convo.assigned_to
   if (filterKey === 'urgent') return convo.priority === 'urgent'
   return true
 }
@@ -47,9 +39,7 @@ export default function AgentDashboard() {
   activeIdRef.current = activeId
 
   useEffect(() => {
-    listConversations().then((list) => {
-      setConversations(list.map((c) => ({ ...c, ...DEFAULT_TICKET_FIELDS })))
-    }).catch(() => {})
+    listConversations().then(setConversations).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -80,7 +70,11 @@ export default function AgentDashboard() {
               id: event.conversation_id,
               client_name: event.client_name,
               created_at: new Date().toISOString(),
-              ...DEFAULT_TICKET_FIELDS,
+              // Matches the backend's own defaults for a freshly created
+              // conversation — kept in sync until the next full refetch.
+              status: 'open',
+              priority: 'medium',
+              assigned_to: null,
             },
             ...prev,
           ]
@@ -94,6 +88,19 @@ export default function AgentDashboard() {
           return { ...prev, [event.conversation_id]: (prev[event.conversation_id] || 0) + 1 }
         })
       }
+
+      // Another agent (or this same one, echoed back) changed a ticket's
+      // status/priority/assignment — keep every connected dashboard in sync
+      // instead of only updating on the next page load.
+      if (event.type === 'ticket_updated') {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === event.conversation_id
+              ? { ...c, status: event.status, priority: event.priority, assigned_to: event.assigned_to }
+              : c
+          )
+        )
+      }
     }
 
     return () => {
@@ -106,21 +113,23 @@ export default function AgentDashboard() {
     setActiveId(id)
     setUnread((prev) => ({ ...prev, [id]: 0 }))
     // Opening an unassigned ticket claims it — mirrors how a real agent
-    // "picks up" a ticket from the queue.
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id && !c.assignedTo ? { ...c, assignedTo: AGENT_NAME } : c))
-    )
+    // "picks up" a ticket from the queue. Persisted on the backend; the
+    // UI updates when the resulting ticket_updated event comes back.
+    const convo = conversations.find((c) => c.id === id)
+    if (convo && !convo.assigned_to) {
+      updateConversation(id, { assigned_to: AGENT_NAME }).catch(() => {})
+    }
   }
 
   const updateTicket = (id, patch) => {
-    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+    updateConversation(id, patch).catch(() => {})
   }
 
   const activeConvo = conversations.find((c) => c.id === activeId)
   const visibleConversations = conversations.filter((c) => matchesFilter(c, filter))
 
-  const openCount = conversations.filter((c) => c.ticketStatus !== 'resolved').length
-  const unassignedCount = conversations.filter((c) => !c.assignedTo).length
+  const openCount = conversations.filter((c) => c.status !== 'resolved').length
+  const unassignedCount = conversations.filter((c) => !c.assigned_to).length
   const urgentCount = conversations.filter((c) => c.priority === 'urgent').length
 
   return (
