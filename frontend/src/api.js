@@ -23,12 +23,13 @@ export async function getMessages(conversationId) {
   return res.json()
 }
 
-export async function updateConversation(conversationId, patch) {
+export async function updateConversation(conversationId, patch, agentToken) {
   const res = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Agent-Token': agentToken || '' },
     body: JSON.stringify(patch),
   })
+  if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error('Failed to update ticket')
   return res.json()
 }

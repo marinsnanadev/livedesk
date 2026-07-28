@@ -19,7 +19,7 @@ import { WS_BASE } from './api'
  * makes any event arriving after cleanup a no-op, and closes the
  * socket the instant it opens instead of relying on close() alone.
  */
-export function useConversationSocket({ conversationId, role, name, onMessage }) {
+export function useConversationSocket({ conversationId, role, name, token, onMessage }) {
   const [connected, setConnected] = useState(false)
   const wsRef = useRef(null)
   const onMessageRef = useRef(onMessage)
@@ -35,7 +35,8 @@ export function useConversationSocket({ conversationId, role, name, onMessage })
 
     const connect = () => {
       if (cancelled) return
-      const url = `${WS_BASE}/ws/conversations/${conversationId}?role=${role}&name=${encodeURIComponent(name)}`
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
+      const url = `${WS_BASE}/ws/conversations/${conversationId}?role=${role}&name=${encodeURIComponent(name)}${tokenParam}`
       socket = new WebSocket(url)
       wsRef.current = socket
 
@@ -73,7 +74,7 @@ export function useConversationSocket({ conversationId, role, name, onMessage })
       clearTimeout(reconnectTimer)
       socket?.close()
     }
-  }, [conversationId, role, name])
+  }, [conversationId, role, name, token])
 
   const send = useCallback((payload) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

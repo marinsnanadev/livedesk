@@ -1,0 +1,83 @@
+.agent-login {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.agent-login__card {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.agent-login__eyebrow {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.agent-login__card h1 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text);
+  margin: 0;
+}
+
+.agent-login__hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.agent-login__hint code {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.agent-login__input {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: var(--space-3);
+  font-size: 13px;
+}
+
+.agent-login__input:focus {
+  outline: none;
+  border-color: var(--signal);
+}
+
+.agent-login__error {
+  color: var(--danger);
+  font-size: 12px;
+  margin: 0;
+}
+
+.agent-login__submit {
+  background: var(--signal-dim);
+  color: var(--text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agent-login__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-login__submit:not(:disabled):hover {
+  background: var(--signal);
+  color: var(--bg);
+}

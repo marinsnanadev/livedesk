@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { listConversations, updateConversation, WS_BASE } from '../api'
 import ChatPanel from '../components/ChatPanel'
 import TicketDetailPanel from '../components/TicketDetailPanel'
+import AgentLogin from '../components/AgentLogin'
 import './AgentDashboard.css'
 
 const AGENT_NAME = 'Nana'
+const TOKEN_KEY = 'livedesk_agent_token'
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -29,6 +31,8 @@ function relativeTime(isoString) {
 }
 
 export default function AgentDashboard() {
+  const [agentToken, setAgentToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) || '')
+  const [authError, setAuthError] = useState('')
   const [conversations, setConversations] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [presence, setPresence] = useState({}) // conversation_id -> 'online' | 'offline'
@@ -38,20 +42,42 @@ export default function AgentDashboard() {
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
 
-  useEffect(() => {
-    listConversations().then(setConversations).catch(() => {})
-  }, [])
+  const handleLogin = (token) => {
+    sessionStorage.setItem(TOKEN_KEY, token)
+    setAuthError('')
+    setAgentToken(token)
+  }
 
   useEffect(() => {
+    if (!agentToken) return
+    listConversations().then(setConversations).catch(() => {})
+  }, [agentToken])
+
+  useEffect(() => {
+    if (!agentToken) return
+
     // Guarded against React StrictMode's dev-only double-mount: closing a
     // socket mid-handshake doesn't stop it from connecting, so without this
     // flag a stray duplicate connection would double-count unread badges.
     let cancelled = false
-    const ws = new WebSocket(`${WS_BASE}/ws/agents?name=${encodeURIComponent(AGENT_NAME)}`)
+    const ws = new WebSocket(
+      `${WS_BASE}/ws/agents?name=${encodeURIComponent(AGENT_NAME)}&token=${encodeURIComponent(agentToken)}`
+    )
     wsRef.current = ws
 
     ws.onopen = () => {
       if (cancelled) ws.close()
+    }
+
+    ws.onclose = (evt) => {
+      if (cancelled) return
+      // 4401 = the token was rejected server-side — bounce back to the
+      // login screen instead of silently sitting on a dead connection.
+      if (evt.code === 4401) {
+        sessionStorage.removeItem(TOKEN_KEY)
+        setAuthError('That token was rejected. Check AGENT_TOKEN in the backend and try again.')
+        setAgentToken('')
+      }
     }
 
     ws.onmessage = (evt) => {
@@ -107,7 +133,7 @@ export default function AgentDashboard() {
       cancelled = true
       ws.close()
     }
-  }, [])
+  }, [agentToken])
 
   const openConversation = (id) => {
     setActiveId(id)
@@ -117,12 +143,12 @@ export default function AgentDashboard() {
     // UI updates when the resulting ticket_updated event comes back.
     const convo = conversations.find((c) => c.id === id)
     if (convo && !convo.assigned_to) {
-      updateConversation(id, { assigned_to: AGENT_NAME }).catch(() => {})
+      updateConversation(id, { assigned_to: AGENT_NAME }, agentToken).catch(() => {})
     }
   }
 
   const updateTicket = (id, patch) => {
-    updateConversation(id, patch).catch(() => {})
+    updateConversation(id, patch, agentToken).catch(() => {})
   }
 
   const activeConvo = conversations.find((c) => c.id === activeId)
@@ -131,6 +157,10 @@ export default function AgentDashboard() {
   const openCount = conversations.filter((c) => c.status !== 'resolved').length
   const unassignedCount = conversations.filter((c) => !c.assigned_to).length
   const urgentCount = conversations.filter((c) => c.priority === 'urgent').length
+
+  if (!agentToken) {
+    return <AgentLogin onSubmit={handleLogin} error={authError} />
+  }
 
   return (
     <div className="dashboard">
@@ -195,6 +225,7 @@ export default function AgentDashboard() {
             conversationId={activeConvo.id}
             role="agent"
             name={AGENT_NAME}
+            token={agentToken}
             placeholder={`Reply to ${activeConvo.client_name}…`}
           />
         ) : (
