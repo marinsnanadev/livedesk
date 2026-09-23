@@ -76,7 +76,13 @@ class ConnectionManager:
             self.disconnect(ws)
 
     def online_agent_count(self) -> int:
-        return len(self.rooms.get(AGENTS_ROOM, set()))
+        # Count distinct agent *names*, not sockets: one agent has two
+        # sockets open at once whenever they have a ticket selected — the
+        # global /ws/agents feed (always open) plus a role=agent socket on
+        # that specific conversation (opened by the chat panel). Counting
+        # sockets reported "2 agents online" for one agent working a ticket.
+        names = {self.meta[ws]["name"] for ws in self.rooms.get(AGENTS_ROOM, set())}
+        return len(names)
 
 
 manager = ConnectionManager()

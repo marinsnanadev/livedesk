@@ -44,6 +44,23 @@ def test_online_agent_count_reflects_real_connections():
     assert resp.json()["count"] == baseline
 
 
+def test_online_agent_count_does_not_double_count_the_same_agent():
+    # Regression test: an agent with a ticket open has TWO sockets in the
+    # agents room at once — the global /ws/agents feed, plus a role=agent
+    # socket on that specific conversation (opened by the chat panel).
+    # Both used to count as separate "online agents" (1 real agent -> 2),
+    # since online_agent_count() counted sockets instead of distinct names.
+    convo_id = _create_conversation("Double Count Target")
+    baseline = client.get("/api/agents/online-count").json()["count"]
+
+    with client.websocket_connect(f"/ws/agents?name=Amy&token={AGENT_TOKEN}"):
+        with client.websocket_connect(
+            f"/ws/conversations/{convo_id}?role=agent&name=Amy&token={AGENT_TOKEN}"
+        ):
+            resp = client.get("/api/agents/online-count")
+            assert resp.json()["count"] == baseline + 1  # one agent, not two
+
+
 def test_create_and_list_conversation():
     convo_id = _create_conversation()
     resp = client.get("/api/conversations")
