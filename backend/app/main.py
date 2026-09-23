@@ -1,7 +1,9 @@
 from __future__ import annotations
 import json
+import os
+from datetime import datetime, timezone
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,22 @@ from .schemas import _as_utc_isoformat
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="LiveDesk API")
+
+# Gate for role=agent on the websocket handshake — without this, anyone
+# who knows the URL shape can open a socket as an "agent" and read every
+# conversation. Not real auth (no per-agent identity, one shared secret),
+# but it closes the obvious hole for a demo project. Set AGENT_TOKEN in
+# your environment/.env for anything beyond local testing.
+AGENT_TOKEN = os.getenv("AGENT_TOKEN", "dev-only-agent-token")
+if AGENT_TOKEN == "dev-only-agent-token":
+    print("[livedesk] WARNING: using the default AGENT_TOKEN — set your own via env for anything beyond local dev.")
+
+
+def require_agent_token(x_agent_token: str = Header(default="")) -> None:
+    """Same shared secret as the websocket handshake, applied to REST
+    endpoints that act with agent privileges (e.g. updating a ticket)."""
+    if x_agent_token != AGENT_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid or missing agent token")
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,6 +45,16 @@ app.add_middleware(
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/agents/online-count")
+def online_agent_count():
+    # Public and unauthenticated on purpose — it's just a headcount, no
+    # conversation data, and the client widget needs it before a visitor
+    # has any conversation (or agent token) at all. Used to be a fixed
+    # "3 agents online now" in the widget regardless of whether anyone
+    # was actually connected.
+    return {"count": manager.online_agent_count()}
 
 
 @app.get("/api/conversations", response_model=list[schemas.ConversationOut])
@@ -52,6 +80,47 @@ def get_messages(conversation_id: str, db: Session = Depends(get_db)):
     return convo.messages
 
 
+@app.patch("/api/conversations/{conversation_id}", response_model=schemas.ConversationOut, dependencies=[Depends(require_agent_token)])
+async def update_conversation(
+    conversation_id: str, payload: schemas.ConversationUpdate, db: Session = Depends(get_db)
+):
+    convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+
+    if "status" in updates and updates["status"] is not None:
+        try:
+            convo.status = models.ConversationStatus(updates["status"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid status")
+
+    if "priority" in updates and updates["priority"] is not None:
+        try:
+            convo.priority = models.ConversationPriority(updates["priority"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid priority")
+
+    if "assigned_to" in updates:
+        convo.assigned_to = updates["assigned_to"]
+
+    db.commit()
+    db.refresh(convo)
+
+    # So a second agent looking at the same ticket sees the change live,
+    # instead of only finding out on their next full page load.
+    await manager.broadcast(AGENTS_ROOM, {
+        "type": "ticket_updated",
+        "conversation_id": convo.id,
+        "status": convo.status.value,
+        "priority": convo.priority.value,
+        "assigned_to": convo.assigned_to,
+    })
+
+    return convo
+
+
 # ---------- WebSocket: the live layer ----------
 #
 # Two kinds of sockets:
@@ -63,7 +132,11 @@ def get_messages(conversation_id: str, db: Session = Depends(get_db)):
 # is never inconsistent with what was shown live.
 
 @app.websocket("/ws/agents")
-async def agents_feed(websocket: WebSocket, name: str = "Agent"):
+async def agents_feed(websocket: WebSocket, name: str = "Agent", token: str = ""):
+    if token != AGENT_TOKEN:
+        await websocket.close(code=4401)
+        return
+
     await manager.connect(websocket, AGENTS_ROOM, role="agent", name=name)
     try:
         while True:
@@ -73,7 +146,17 @@ async def agents_feed(websocket: WebSocket, name: str = "Agent"):
 
 
 @app.websocket("/ws/conversations/{conversation_id}")
-async def conversation_room(websocket: WebSocket, conversation_id: str, role: str = "client", name: str = "Visitor"):
+async def conversation_room(
+    websocket: WebSocket,
+    conversation_id: str,
+    role: str = "client",
+    name: str = "Visitor",
+    token: str = "",
+):
+    if role == "agent" and token != AGENT_TOKEN:
+        await websocket.close(code=4401)
+        return
+
     db = next(get_db())
     convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
     if not convo:

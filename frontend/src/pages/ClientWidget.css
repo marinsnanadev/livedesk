@@ -179,6 +179,25 @@
   z-index: 2;
 }
 
+/* A fixed 340px + 24px right offset overflows any viewport under ~364px
+   (e.g. a 320px-wide phone) — the window's edge or the page itself ends
+   up clipped/scrollable sideways. Below that width, span the viewport
+   with margins on both sides instead of a fixed width. */
+@media (max-width: 400px) {
+  .widget-window {
+    left: var(--space-3);
+    right: var(--space-3);
+    width: auto;
+    bottom: 88px;
+    height: min(460px, calc(100vh - 160px));
+  }
+
+  .support-callout {
+    right: var(--space-3);
+    bottom: var(--space-4);
+  }
+}
+
 .widget-window__header {
   display: flex;
   align-items: center;

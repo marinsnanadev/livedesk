@@ -23,6 +23,12 @@ export async function getMessages(conversationId) {
   return res.json()
 }
 
+export async function getOnlineAgentCount() {
+  const res = await fetch(`${API_BASE}/api/agents/online-count`)
+  if (!res.ok) throw new Error('Failed to fetch online agent count')
+  return res.json()
+}
+
 export async function updateConversation(conversationId, patch, agentToken) {
   const res = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
     method: 'PATCH',

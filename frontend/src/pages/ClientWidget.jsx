@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { createConversation } from '../api'
+import { createConversation, getOnlineAgentCount } from '../api'
 import ChatPanel from '../components/ChatPanel'
 import './ClientWidget.css'
 
 const NAME_KEY = 'livedesk_client_name'
 const CONVO_KEY = 'livedesk_conversation_id'
+const AGENT_COUNT_POLL_MS = 20000
 
 // Fictional backdrop content — just enough for the widget to feel like
 // it's embedded on a real product site instead of floating in a void.
@@ -17,6 +18,7 @@ const FEATURES = [
 export default function ClientWidget() {
   const [open, setOpen] = useState(false)
   const [conversationId, setConversationId] = useState(sessionStorage.getItem(CONVO_KEY))
+  const [onlineAgentCount, setOnlineAgentCount] = useState(null)
   const [name] = useState(() => {
     const existing = sessionStorage.getItem(NAME_KEY)
     if (existing) return existing
@@ -32,6 +34,26 @@ export default function ClientWidget() {
       sessionStorage.setItem(CONVO_KEY, c.id)
     })
   }, [open, conversationId, name])
+
+  useEffect(() => {
+    // Was a hardcoded "3 agents online now" regardless of whether anyone
+    // was actually connected. Polls instead of a live socket since it's
+    // a minor bit of copy, not worth a dedicated connection.
+    let cancelled = false
+    const poll = () => {
+      getOnlineAgentCount()
+        .then(({ count }) => {
+          if (!cancelled) setOnlineAgentCount(count)
+        })
+        .catch(() => {})
+    }
+    poll()
+    const interval = setInterval(poll, AGENT_COUNT_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   return (
     <div className="widget-stage">
@@ -80,8 +102,12 @@ export default function ClientWidget() {
       {!open && (
         <div className="support-callout">
           <div className="support-callout__bubble">
-            <span className="status-dot online" />
-            <span>3 agents online now</span>
+            <span className={`status-dot ${onlineAgentCount > 0 ? 'online' : ''}`} />
+            <span>
+              {onlineAgentCount > 0
+                ? `${onlineAgentCount} agent${onlineAgentCount === 1 ? '' : 's'} online now`
+                : "We'll get back to you soon"}
+            </span>
           </div>
           <button className="widget-launcher" onClick={() => setOpen(true)}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

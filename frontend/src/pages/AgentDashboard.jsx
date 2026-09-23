@@ -1,19 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { listConversations, WS_BASE } from '../api'
-import { useReconnectingSocket } from '../useReconnectingSocket'
+import { listConversations, updateConversation, WS_BASE } from '../api'
 import ChatPanel from '../components/ChatPanel'
 import TicketDetailPanel from '../components/TicketDetailPanel'
+import AgentLogin from '../components/AgentLogin'
 import './AgentDashboard.css'
 
-const AGENT_NAME = 'Nana'
-
-// NOTE: ticketStatus / priority / assignedTo are LOCAL-ONLY for now —
-// the backend doesn't persist these fields yet. They live in this
-// component's state so we can shape the UI before touching the schema.
-// Once the direction is approved, these move into the Conversation
-// model on the backend and get loaded from the API instead of defaulted
-// here.
-const DEFAULT_TICKET_FIELDS = { ticketStatus: 'open', priority: 'medium', assignedTo: null }
+const AGENT_NAME = 'Amy'
+const TOKEN_KEY = 'livedesk_agent_token'
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -22,7 +15,7 @@ const FILTERS = [
 ]
 
 function matchesFilter(convo, filterKey) {
-  if (filterKey === 'unassigned') return !convo.assignedTo
+  if (filterKey === 'unassigned') return !convo.assigned_to
   if (filterKey === 'urgent') return convo.priority === 'urgent'
   return true
 }
@@ -38,75 +31,164 @@ function relativeTime(isoString) {
 }
 
 export default function AgentDashboard() {
+  const [agentToken, setAgentToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) || '')
+  const [authError, setAuthError] = useState('')
   const [conversations, setConversations] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [presence, setPresence] = useState({}) // conversation_id -> 'online' | 'offline'
   const [unread, setUnread] = useState({}) // conversation_id -> count
   const [filter, setFilter] = useState('all')
+  const wsRef = useRef(null)
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
 
-  useEffect(() => {
-    listConversations().then((list) => {
-      setConversations(list.map((c) => ({ ...c, ...DEFAULT_TICKET_FIELDS })))
-    }).catch(() => {})
-  }, [])
-
-  const handleAgentEvent = (event) => {
-    if (event.type === 'presence') {
-      setPresence((prev) => ({ ...prev, [event.conversation_id]: event.status }))
-    }
-
-    if (event.type === 'new_activity') {
-      setConversations((prev) => {
-        if (prev.some((c) => c.id === event.conversation_id)) return prev
-        return [
-          {
-            id: event.conversation_id,
-            client_name: event.client_name,
-            created_at: new Date().toISOString(),
-            ...DEFAULT_TICKET_FIELDS,
-          },
-          ...prev,
-        ]
-      })
-      setPresence((prev) => ({ ...prev, [event.conversation_id]: 'online' }))
-    }
-
-    if (event.type === 'new_message') {
-      setUnread((prev) => {
-        if (event.conversation_id === activeIdRef.current) return prev
-        return { ...prev, [event.conversation_id]: (prev[event.conversation_id] || 0) + 1 }
-      })
-    }
+  const handleLogin = (token) => {
+    sessionStorage.setItem(TOKEN_KEY, token)
+    setAuthError('')
+    setAgentToken(token)
   }
 
-  // Reconnects with backoff on drop — see useReconnectingSocket for why
-  // this matters. Without it, a dropped agents-feed socket used to leave
-  // the sidebar (presence, new tickets, unread badges) silently stale
-  // until a manual page refresh.
-  useReconnectingSocket(`${WS_BASE}/ws/agents?name=${encodeURIComponent(AGENT_NAME)}`, handleAgentEvent)
+  useEffect(() => {
+    if (!agentToken) return
+    listConversations().then(setConversations).catch(() => {})
+  }, [agentToken])
+
+  useEffect(() => {
+    if (!agentToken) return
+
+    // Guarded against React StrictMode's dev-only double-mount: closing a
+    // socket mid-handshake doesn't stop it from connecting, so without this
+    // flag a stray duplicate connection would double-count unread badges.
+    let cancelled = false
+    let ws = null
+    let attempt = 0
+    let reconnectTimer = null
+
+    const connect = () => {
+      if (cancelled) return
+      ws = new WebSocket(
+        `${WS_BASE}/ws/agents?name=${encodeURIComponent(AGENT_NAME)}&token=${encodeURIComponent(agentToken)}`
+      )
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        if (cancelled) {
+          ws.close()
+          return
+        }
+        attempt = 0
+      }
+
+      ws.onclose = (evt) => {
+        if (cancelled) return
+
+        // 4401 = the token was rejected server-side — bounce back to the
+        // login screen instead of retrying with a token that won't work.
+        if (evt.code === 4401) {
+          sessionStorage.removeItem(TOKEN_KEY)
+          setAuthError('That token was rejected. Check AGENT_TOKEN in the backend and try again.')
+          setAgentToken('')
+          return
+        }
+
+        // Any other drop (network hiccup, tab backgrounded, laptop sleep)
+        // reconnects with backoff instead of silently leaving the sidebar
+        // — presence, new tickets, unread badges — stale until a manual
+        // page refresh.
+        const delay = Math.min(1000 * 2 ** attempt, 8000)
+        attempt += 1
+        reconnectTimer = setTimeout(connect, delay)
+      }
+
+      ws.onerror = () => {
+        ws.close()
+      }
+
+      ws.onmessage = (evt) => {
+        if (cancelled) return
+        const event = JSON.parse(evt.data)
+
+        if (event.type === 'presence') {
+          setPresence((prev) => ({ ...prev, [event.conversation_id]: event.status }))
+        }
+
+        if (event.type === 'new_activity') {
+          setConversations((prev) => {
+            if (prev.some((c) => c.id === event.conversation_id)) return prev
+            return [
+              {
+                id: event.conversation_id,
+                client_name: event.client_name,
+                created_at: new Date().toISOString(),
+                // Matches the backend's own defaults for a freshly created
+                // conversation — kept in sync until the next full refetch.
+                status: 'open',
+                priority: 'medium',
+                assigned_to: null,
+              },
+              ...prev,
+            ]
+          })
+          setPresence((prev) => ({ ...prev, [event.conversation_id]: 'online' }))
+        }
+
+        if (event.type === 'new_message') {
+          setUnread((prev) => {
+            if (event.conversation_id === activeIdRef.current) return prev
+            return { ...prev, [event.conversation_id]: (prev[event.conversation_id] || 0) + 1 }
+          })
+        }
+
+        // Another agent (or this same one, echoed back) changed a ticket's
+        // status/priority/assignment — keep every connected dashboard in sync
+        // instead of only updating on the next page load.
+        if (event.type === 'ticket_updated') {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === event.conversation_id
+                ? { ...c, status: event.status, priority: event.priority, assigned_to: event.assigned_to }
+                : c
+            )
+          )
+        }
+      }
+    }
+
+    connect()
+
+    return () => {
+      cancelled = true
+      clearTimeout(reconnectTimer)
+      ws?.close()
+    }
+  }, [agentToken])
 
   const openConversation = (id) => {
     setActiveId(id)
     setUnread((prev) => ({ ...prev, [id]: 0 }))
     // Opening an unassigned ticket claims it — mirrors how a real agent
-    // "picks up" a ticket from the queue.
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id && !c.assignedTo ? { ...c, assignedTo: AGENT_NAME } : c))
-    )
+    // "picks up" a ticket from the queue. Persisted on the backend; the
+    // UI updates when the resulting ticket_updated event comes back.
+    const convo = conversations.find((c) => c.id === id)
+    if (convo && !convo.assigned_to) {
+      updateConversation(id, { assigned_to: AGENT_NAME }, agentToken).catch(() => {})
+    }
   }
 
   const updateTicket = (id, patch) => {
-    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+    updateConversation(id, patch, agentToken).catch(() => {})
   }
 
   const activeConvo = conversations.find((c) => c.id === activeId)
   const visibleConversations = conversations.filter((c) => matchesFilter(c, filter))
 
-  const openCount = conversations.filter((c) => c.ticketStatus !== 'resolved').length
-  const unassignedCount = conversations.filter((c) => !c.assignedTo).length
+  const openCount = conversations.filter((c) => c.status !== 'resolved').length
+  const unassignedCount = conversations.filter((c) => !c.assigned_to).length
   const urgentCount = conversations.filter((c) => c.priority === 'urgent').length
+
+  if (!agentToken) {
+    return <AgentLogin onSubmit={handleLogin} error={authError} />
+  }
 
   return (
     <div className="dashboard">
@@ -171,6 +253,7 @@ export default function AgentDashboard() {
             conversationId={activeConvo.id}
             role="agent"
             name={AGENT_NAME}
+            token={agentToken}
             placeholder={`Reply to ${activeConvo.client_name}…`}
           />
         ) : (

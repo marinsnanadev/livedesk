@@ -76,7 +76,7 @@ class ConnectionManager:
             self.disconnect(ws)
 
     def online_agent_count(self) -> int:
-        return len({ws for ws in self.rooms.get(AGENTS_ROOM, set())})
+        return len(self.rooms.get(AGENTS_ROOM, set()))
 
 
 manager = ConnectionManager()

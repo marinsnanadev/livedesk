@@ -35,6 +35,8 @@ class ConversationOut(BaseModel):
     id: str
     client_name: str
     status: str
+    priority: str
+    assigned_to: str | None
     created_at: datetime
 
     @field_serializer("created_at")
@@ -44,3 +46,11 @@ class ConversationOut(BaseModel):
 
 class ConversationCreate(BaseModel):
     client_name: str = "Visitor"
+
+
+class ConversationUpdate(BaseModel):
+    """PATCH payload — every field optional so an agent can update just one at a time."""
+
+    status: str | None = None
+    priority: str | None = None
+    assigned_to: str | None = None

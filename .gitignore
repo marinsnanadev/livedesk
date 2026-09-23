@@ -3,6 +3,7 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/.pytest_cache/
 backend/livedesk.db
+backend/test_livedesk.db
 backend/.env
 backend/venv/
 backend/.venv/
