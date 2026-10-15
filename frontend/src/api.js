@@ -11,14 +11,21 @@ export async function createConversation(clientName) {
   return res.json()
 }
 
-export async function listConversations() {
-  const res = await fetch(`${API_BASE}/api/conversations`)
+export async function listConversations(agentToken) {
+  const res = await fetch(`${API_BASE}/api/conversations`, {
+    headers: { 'X-Agent-Token': agentToken || '' },
+  })
+  if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error('Failed to list conversations')
   return res.json()
 }
 
-export async function getMessages(conversationId) {
-  const res = await fetch(`${API_BASE}/api/conversations/${conversationId}/messages`)
+export async function getMessages(conversationId, role, token) {
+  const header = role === 'agent' ? 'X-Agent-Token' : 'X-Client-Token'
+  const res = await fetch(`${API_BASE}/api/conversations/${conversationId}/messages`, {
+    headers: { [header]: token || '' },
+  })
+  if (res.status === 401) throw new Error('unauthorized')
   if (!res.ok) throw new Error('Failed to fetch history')
   return res.json()
 }

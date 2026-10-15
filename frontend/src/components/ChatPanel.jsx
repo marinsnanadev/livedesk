@@ -30,8 +30,8 @@ export default function ChatPanel({ conversationId, role, name, token, placehold
 
   useEffect(() => {
     if (!conversationId) return
-    getMessages(conversationId).then(setMessages).catch(() => {})
-  }, [conversationId])
+    getMessages(conversationId, role, token).then(setMessages).catch(() => {})
+  }, [conversationId, role, token])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })

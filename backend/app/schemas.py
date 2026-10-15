@@ -44,6 +44,10 @@ class ConversationOut(BaseModel):
         return _as_utc_isoformat(value)
 
 
+class ConversationCreated(ConversationOut):
+    client_token: str
+
+
 class ConversationCreate(BaseModel):
     client_name: str = "Visitor"
 

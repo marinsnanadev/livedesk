@@ -5,6 +5,7 @@ import './ClientWidget.css'
 
 const NAME_KEY = 'livedesk_client_name'
 const CONVO_KEY = 'livedesk_conversation_id'
+const CLIENT_TOKEN_KEY = 'livedesk_client_token'
 const AGENT_COUNT_POLL_MS = 20000
 
 // Fictional backdrop content — just enough for the widget to feel like
@@ -18,6 +19,7 @@ const FEATURES = [
 export default function ClientWidget() {
   const [open, setOpen] = useState(false)
   const [conversationId, setConversationId] = useState(sessionStorage.getItem(CONVO_KEY))
+  const [clientToken, setClientToken] = useState(sessionStorage.getItem(CLIENT_TOKEN_KEY))
   const [onlineAgentCount, setOnlineAgentCount] = useState(null)
   const [name] = useState(() => {
     const existing = sessionStorage.getItem(NAME_KEY)
@@ -28,12 +30,14 @@ export default function ClientWidget() {
   })
 
   useEffect(() => {
-    if (!open || conversationId) return
+    if (!open || (conversationId && clientToken)) return
     createConversation(name).then((c) => {
       setConversationId(c.id)
+      setClientToken(c.client_token)
       sessionStorage.setItem(CONVO_KEY, c.id)
+      sessionStorage.setItem(CLIENT_TOKEN_KEY, c.client_token)
     })
-  }, [open, conversationId, name])
+  }, [open, conversationId, clientToken, name])
 
   useEffect(() => {
     // Was a hardcoded "3 agents online now" regardless of whether anyone
@@ -90,8 +94,14 @@ export default function ClientWidget() {
             <button onClick={() => setOpen(false)} aria-label="Close chat">✕</button>
           </div>
           <div className="widget-window__body">
-            {conversationId ? (
-              <ChatPanel conversationId={conversationId} role="client" name={name} placeholder="How can we help?" />
+            {conversationId && clientToken ? (
+              <ChatPanel
+                conversationId={conversationId}
+                role="client"
+                name={name}
+                token={clientToken}
+                placeholder="How can we help?"
+              />
             ) : (
               <p className="widget-window__loading">Connecting…</p>
             )}

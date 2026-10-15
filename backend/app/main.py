@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+import secrets
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,10 +26,12 @@ if AGENT_TOKEN == "dev-only-agent-token":
     print("[livedesk] WARNING: using the default AGENT_TOKEN — set your own via env for anything beyond local dev.")
 
 
+def tokens_match(given: str, expected: str) -> bool:
+    return secrets.compare_digest(given.encode(), expected.encode())
+
+
 def require_agent_token(x_agent_token: str = Header(default="")) -> None:
-    """Same shared secret as the websocket handshake, applied to REST
-    endpoints that act with agent privileges (e.g. updating a ticket)."""
-    if x_agent_token != AGENT_TOKEN:
+    if not tokens_match(x_agent_token, AGENT_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid or missing agent token")
 
 app.add_middleware(
@@ -56,13 +59,17 @@ def online_agent_count():
     return {"count": manager.online_agent_count()}
 
 
-@app.get("/api/conversations", response_model=list[schemas.ConversationOut])
+@app.get(
+    "/api/conversations",
+    response_model=list[schemas.ConversationOut],
+    dependencies=[Depends(require_agent_token)],
+)
 def list_conversations(db: Session = Depends(get_db)):
     convos = db.query(models.Conversation).order_by(models.Conversation.created_at.desc()).all()
     return convos
 
 
-@app.post("/api/conversations", response_model=schemas.ConversationOut)
+@app.post("/api/conversations", response_model=schemas.ConversationCreated)
 def create_conversation(payload: schemas.ConversationCreate, db: Session = Depends(get_db)):
     convo = models.Conversation(client_name=payload.client_name)
     db.add(convo)
@@ -72,10 +79,20 @@ def create_conversation(payload: schemas.ConversationCreate, db: Session = Depen
 
 
 @app.get("/api/conversations/{conversation_id}/messages", response_model=list[schemas.MessageOut])
-def get_messages(conversation_id: str, db: Session = Depends(get_db)):
+def get_messages(
+    conversation_id: str,
+    x_agent_token: str = Header(default=""),
+    x_client_token: str = Header(default=""),
+    db: Session = Depends(get_db),
+):
     convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    is_agent = tokens_match(x_agent_token, AGENT_TOKEN)
+    is_owner = tokens_match(x_client_token, convo.client_token)
+    if not (is_agent or is_owner):
+        raise HTTPException(status_code=401, detail="Invalid or missing token")
     return convo.messages
 
 
@@ -132,7 +149,7 @@ async def update_conversation(
 
 @app.websocket("/ws/agents")
 async def agents_feed(websocket: WebSocket, name: str = "Agent", token: str = ""):
-    if token != AGENT_TOKEN:
+    if not tokens_match(token, AGENT_TOKEN):
         await websocket.close(code=4401)
         return
 
@@ -152,7 +169,7 @@ async def conversation_room(
     name: str = "Visitor",
     token: str = "",
 ):
-    if role == "agent" and token != AGENT_TOKEN:
+    if role == "agent" and not tokens_match(token, AGENT_TOKEN):
         await websocket.close(code=4401)
         return
 

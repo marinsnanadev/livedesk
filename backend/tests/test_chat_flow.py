@@ -63,7 +63,7 @@ def test_online_agent_count_does_not_double_count_the_same_agent():
 
 def test_create_and_list_conversation():
     convo_id = _create_conversation()
-    resp = client.get("/api/conversations")
+    resp = client.get("/api/conversations", headers=AGENT_HEADERS)
     assert resp.status_code == 200
     assert any(c["id"] == convo_id for c in resp.json())
 
@@ -85,7 +85,7 @@ def test_message_round_trip_over_websocket():
         assert agent_event["body"] == "Hi, I need help"
 
     # Persisted, so it survives after the sockets close.
-    history = client.get(f"/api/conversations/{convo_id}/messages").json()
+    history = client.get(f"/api/conversations/{convo_id}/messages", headers=AGENT_HEADERS).json()
     assert len(history) == 1
     assert history[0]["sender_name"] == "Maria"
 
@@ -101,13 +101,13 @@ def test_typing_event_is_not_persisted():
         assert event["type"] == "typing"
         assert event["is_typing"] is True
 
-    history = client.get(f"/api/conversations/{convo_id}/messages").json()
+    history = client.get(f"/api/conversations/{convo_id}/messages", headers=AGENT_HEADERS).json()
     assert history == []
 
 
 def test_new_conversation_has_ticket_defaults():
     convo_id = _create_conversation("Default Ticket")
-    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    convo = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
     assert convo["status"] == "open"
     assert convo["priority"] == "medium"
     assert convo["assigned_to"] is None
@@ -130,7 +130,7 @@ def test_update_ticket_persists_across_requests():
     # Bug this guards against: if the endpoint updated its own in-memory
     # object but never called db.commit(), this second, independent
     # request would still read back the old defaults.
-    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    convo = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
     assert convo["status"] == "in_progress"
     assert convo["priority"] == "urgent"
     assert convo["assigned_to"] == "Amy"
@@ -142,7 +142,7 @@ def test_update_ticket_rejects_invalid_status():
     assert resp.status_code == 422
 
     # Confirms the rejected update didn't slip through before validation failed.
-    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    convo = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
     assert convo["status"] == "open"
 
 
@@ -169,7 +169,7 @@ def test_update_conversation_rejects_missing_agent_token():
     assert resp.status_code == 401
 
     # Confirms the rejected request never touched the row.
-    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    convo = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
     assert convo["priority"] == "medium"
 
 
@@ -225,7 +225,7 @@ def test_timestamps_are_serialized_as_explicit_utc():
     # A correctly UTC-tagged value always ends in "+00:00" or "Z".
     convo_id = _create_conversation("Timezone Tester")
 
-    convo = next(c for c in client.get("/api/conversations").json() if c["id"] == convo_id)
+    convo = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
     assert convo["created_at"].endswith("+00:00") or convo["created_at"].endswith("Z")
 
     with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Timezone Tester") as ws:
@@ -233,7 +233,7 @@ def test_timestamps_are_serialized_as_explicit_utc():
         event = ws.receive_json()
         assert event["created_at"].endswith("+00:00") or event["created_at"].endswith("Z")
 
-    history = client.get(f"/api/conversations/{convo_id}/messages").json()
+    history = client.get(f"/api/conversations/{convo_id}/messages", headers=AGENT_HEADERS).json()
     assert history[0]["created_at"].endswith("+00:00") or history[0]["created_at"].endswith("Z")
 
 
@@ -266,5 +266,55 @@ def test_message_without_body_is_rejected_not_crashed():
         error = ws.receive_json()
         assert error["type"] == "error"
 
-    history = client.get(f"/api/conversations/{convo_id}/messages").json()
+    history = client.get(f"/api/conversations/{convo_id}/messages", headers=AGENT_HEADERS).json()
     assert history == []
+
+
+def test_list_conversations_requires_agent_token():
+    # Regression test: the list endpoint used to be public, so anyone could
+    # enumerate every conversation (and its id) without the agent token.
+    _create_conversation("Hidden Ticket")
+
+    assert client.get("/api/conversations").status_code == 401
+    wrong = client.get("/api/conversations", headers={"X-Agent-Token": "nope"})
+    assert wrong.status_code == 401
+
+
+def test_messages_require_a_token():
+    convo_id = _create_conversation("Private Chat")
+    url = f"/api/conversations/{convo_id}/messages"
+
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers={"X-Client-Token": "guess"}).status_code == 401
+    assert client.get(url, headers={"X-Agent-Token": "guess"}).status_code == 401
+
+
+def test_client_can_read_only_its_own_conversation():
+    mine = client.post("/api/conversations", json={"client_name": "Mine"}).json()
+    other = client.post("/api/conversations", json={"client_name": "Other"}).json()
+
+    own = client.get(
+        f"/api/conversations/{mine['id']}/messages",
+        headers={"X-Client-Token": mine["client_token"]},
+    )
+    assert own.status_code == 200
+
+    # A valid client token for a different conversation must not open this one.
+    crossed = client.get(
+        f"/api/conversations/{other['id']}/messages",
+        headers={"X-Client-Token": mine["client_token"]},
+    )
+    assert crossed.status_code == 401
+
+
+def test_client_token_is_only_handed_out_on_creation():
+    created = client.post("/api/conversations", json={"client_name": "Once"}).json()
+    assert created["client_token"]
+
+    listed = client.get("/api/conversations", headers=AGENT_HEADERS).json()
+    assert all("client_token" not in c for c in listed)
+
+
+def test_agent_token_with_non_ascii_characters_is_a_401_not_a_crash():
+    resp = client.get("/api/conversations", headers={"X-Agent-Token": "tokén".encode("latin-1")})
+    assert resp.status_code == 401

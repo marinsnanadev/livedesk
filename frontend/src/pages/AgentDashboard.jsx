@@ -7,6 +7,7 @@ import './AgentDashboard.css'
 
 const AGENT_NAME = 'Amy'
 const TOKEN_KEY = 'livedesk_agent_token'
+const REJECTED_TOKEN_MESSAGE = 'That token was rejected. Check AGENT_TOKEN in the backend and try again.'
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -50,7 +51,14 @@ export default function AgentDashboard() {
 
   useEffect(() => {
     if (!agentToken) return
-    listConversations().then(setConversations).catch(() => {})
+    listConversations(agentToken)
+      .then(setConversations)
+      .catch((err) => {
+        if (err.message !== 'unauthorized') return
+        sessionStorage.removeItem(TOKEN_KEY)
+        setAuthError(REJECTED_TOKEN_MESSAGE)
+        setAgentToken('')
+      })
   }, [agentToken])
 
   useEffect(() => {
@@ -86,7 +94,7 @@ export default function AgentDashboard() {
         // login screen instead of retrying with a token that won't work.
         if (evt.code === 4401) {
           sessionStorage.removeItem(TOKEN_KEY)
-          setAuthError('That token was rejected. Check AGENT_TOKEN in the backend and try again.')
+          setAuthError(REJECTED_TOKEN_MESSAGE)
           setAgentToken('')
           return
         }

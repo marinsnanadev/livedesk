@@ -27,7 +27,7 @@ Agent (dashboard) ──┘
 - "Typing" events never touch the database.
 - Ticket status, priority, and assignment are persisted too — updating one broadcasts a `ticket_updated` event to every connected agent, so two dashboards never disagree about who owns a ticket.
 - The frontend automatically reconnects with exponential backoff if the socket drops.
-- `role=agent` is gated by a shared `AGENT_TOKEN`, checked on both the websocket handshake and the ticket-update endpoint — without it, anyone who knows the URL shape could open a socket as an "agent" and read every conversation.
+- `role=agent` is gated by a shared `AGENT_TOKEN`, checked on the websocket handshake and on every agent REST endpoint (listing and updating tickets) — without it, anyone who knows the URL shape could open a socket as an "agent" and read every conversation. Visitors get a per-conversation `client_token` when their chat is created, and that is the only thing that lets them read that conversation's history.
 
 ## Running locally
 

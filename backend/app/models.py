@@ -3,6 +3,7 @@ Persisted data. WebSockets carry the "live" layer (presence, typing),
 but every message and conversation lives here — so a page refresh,
 or an agent joining mid-conversation, never loses history.
 """
+import secrets
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SAEnum
@@ -14,6 +15,10 @@ from .database import Base
 
 def new_id() -> str:
     return uuid.uuid4().hex[:12]
+
+
+def new_client_token() -> str:
+    return secrets.token_urlsafe(24)
 
 
 class ConversationStatus(str, enum.Enum):
@@ -42,6 +47,7 @@ class Conversation(Base):
     status = Column(SAEnum(ConversationStatus), default=ConversationStatus.open, nullable=False)
     priority = Column(SAEnum(ConversationPriority), default=ConversationPriority.medium, nullable=False)
     assigned_to = Column(String, nullable=True)
+    client_token = Column(String, nullable=False, default=new_client_token)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     messages = relationship("Message", back_populates="conversation", order_by="Message.created_at")
