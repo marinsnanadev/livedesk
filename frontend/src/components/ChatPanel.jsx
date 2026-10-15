@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getMessages } from '../api'
 import { useConversationSocket } from '../useConversationSocket'
 import { useTypingSignal } from '../useTypingSignal'
+import { mergeHistory } from '../mergeMessages'
 import './ChatPanel.css'
 
 export default function ChatPanel({ conversationId, role, name, token, placeholder, onRejected }) {
@@ -29,10 +30,19 @@ export default function ChatPanel({ conversationId, role, name, token, placehold
   })
   const { notifyTyping, notifyStopped } = useTypingSignal(send)
 
-  useEffect(() => {
+  const loadHistory = useCallback(() => {
     if (!conversationId) return
-    getMessages(conversationId, role, token).then(setMessages).catch(() => {})
+    getMessages(conversationId, role, token)
+      .then((history) => setMessages((current) => mergeHistory(history, current)))
+      .catch(() => {})
   }, [conversationId, role, token])
+
+  // Refetch on every (re)connect: whatever was sent while the socket was down
+  // never comes back through it, and the first fetch can run before the
+  // socket has joined the room, leaving a gap in between.
+  useEffect(() => {
+    loadHistory()
+  }, [loadHistory, connected])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -41,7 +51,7 @@ export default function ChatPanel({ conversationId, role, name, token, placehold
   const handleSend = () => {
     const body = draft.trim()
     if (!body) return
-    send({ type: 'message', body })
+    if (!send({ type: 'message', body })) return
     notifyStopped()
     setDraft('')
   }
@@ -93,7 +103,7 @@ export default function ChatPanel({ conversationId, role, name, token, placehold
           onKeyDown={handleKeyDown}
           rows={1}
         />
-        <button className="chat-panel__send" onClick={handleSend} disabled={!draft.trim()}>
+        <button className="chat-panel__send" onClick={handleSend} disabled={!draft.trim() || !connected}>
           Send
         </button>
       </div>

@@ -84,9 +84,9 @@ export function useConversationSocket({ conversationId, role, name, token, onMes
   }, [conversationId, role, name, token])
 
   const send = useCallback((payload) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(payload))
-    }
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return false
+    wsRef.current.send(JSON.stringify(payload))
+    return true
   }, [])
 
   return { connected, send }
