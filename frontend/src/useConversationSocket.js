@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { WS_BASE } from './api'
+import { isRejection } from './closeCodes'
 
 /**
  * Owns one WebSocket connection to a conversation room.
@@ -19,11 +20,13 @@ import { WS_BASE } from './api'
  * makes any event arriving after cleanup a no-op, and closes the
  * socket the instant it opens instead of relying on close() alone.
  */
-export function useConversationSocket({ conversationId, role, name, token, onMessage }) {
+export function useConversationSocket({ conversationId, role, name, token, onMessage, onRejected }) {
   const [connected, setConnected] = useState(false)
   const wsRef = useRef(null)
   const onMessageRef = useRef(onMessage)
   onMessageRef.current = onMessage
+  const onRejectedRef = useRef(onRejected)
+  onRejectedRef.current = onRejected
 
   useEffect(() => {
     if (!conversationId) return
@@ -54,9 +57,13 @@ export function useConversationSocket({ conversationId, role, name, token, onMes
         onMessageRef.current?.(JSON.parse(evt.data))
       }
 
-      socket.onclose = () => {
+      socket.onclose = (evt) => {
         setConnected(false)
         if (cancelled) return
+        if (isRejection(evt.code)) {
+          onRejectedRef.current?.(evt.code)
+          return
+        }
         const delay = Math.min(1000 * 2 ** attempt, 8000)
         attempt += 1
         reconnectTimer = setTimeout(connect, delay)

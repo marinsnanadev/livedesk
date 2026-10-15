@@ -140,6 +140,14 @@ async def update_conversation(
     return convo
 
 
+async def reject(websocket: WebSocket, code: int) -> None:
+    # Closing before accept() makes the server answer the upgrade with a plain
+    # HTTP 403, and browsers never see the close code. Accept first so the
+    # client actually receives 4400/4401/4404.
+    await websocket.accept()
+    await websocket.close(code=code)
+
+
 def find_client_token(conversation_id: str) -> str | None:
     with SessionLocal() as db:
         convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
@@ -181,7 +189,7 @@ def save_message(conversation_id: str, role: str, name: str, body: str) -> dict:
 @app.websocket("/ws/agents")
 async def agents_feed(websocket: WebSocket, name: str = "Agent", token: str = ""):
     if not tokens_match(token, AGENT_TOKEN):
-        await websocket.close(code=4401)
+        await reject(websocket, 4401)
         return
 
     await manager.connect(websocket, AGENTS_ROOM, role="agent", name=name)
@@ -201,20 +209,20 @@ async def conversation_room(
     token: str = "",
 ):
     if role not in VALID_ROLES:
-        await websocket.close(code=4400)
+        await reject(websocket, 4400)
         return
 
     if role == "agent" and not tokens_match(token, AGENT_TOKEN):
-        await websocket.close(code=4401)
+        await reject(websocket, 4401)
         return
 
     client_token = find_client_token(conversation_id)
     if client_token is None:
-        await websocket.close(code=4404)
+        await reject(websocket, 4404)
         return
 
     if role == "client" and not tokens_match(token, client_token):
-        await websocket.close(code=4401)
+        await reject(websocket, 4401)
         return
 
     await manager.connect(websocket, conversation_id, role=role, name=name)

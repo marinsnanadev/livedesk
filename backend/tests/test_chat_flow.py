@@ -33,9 +33,11 @@ def _client_url(convo, name="Tester"):
 
 
 def _close_code_when_rejected(url):
-    with pytest.raises(WebSocketDisconnect) as exc:
-        with client.websocket_connect(url):
-            pass
+    # The handshake has to succeed first: if the server closes before
+    # accepting, a browser gets a bare HTTP 403 and never sees the code.
+    with client.websocket_connect(url) as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_text()
     return exc.value.code
 
 
@@ -195,30 +197,13 @@ def test_update_conversation_rejects_missing_agent_token():
 
 
 def test_agents_feed_rejects_missing_or_wrong_token():
-    from starlette.websockets import WebSocketDisconnect
-
-    try:
-        with client.websocket_connect("/ws/agents?name=Intruder"):
-            assert False, "should have been rejected without a token"
-    except WebSocketDisconnect as exc:
-        assert exc.code == 4401
-
-    try:
-        with client.websocket_connect("/ws/agents?name=Intruder&token=totally-wrong"):
-            assert False, "should have been rejected with a wrong token"
-    except WebSocketDisconnect as exc:
-        assert exc.code == 4401
+    assert _close_code_when_rejected("/ws/agents?name=Intruder") == 4401
+    assert _close_code_when_rejected("/ws/agents?name=Intruder&token=totally-wrong") == 4401
 
 
 def test_conversation_room_rejects_agent_role_without_token():
-    from starlette.websockets import WebSocketDisconnect
-
     convo_id = _create_conversation("Guarded Room")
-    try:
-        with client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Intruder"):
-            assert False, "should have been rejected without a token"
-    except WebSocketDisconnect as exc:
-        assert exc.code == 4401
+    assert _close_code_when_rejected(f"/ws/conversations/{convo_id}?role=agent&name=Intruder") == 4401
 
 
 def test_conversation_room_requires_the_conversation_client_token():

@@ -4,7 +4,7 @@ import { useConversationSocket } from '../useConversationSocket'
 import { useTypingSignal } from '../useTypingSignal'
 import './ChatPanel.css'
 
-export default function ChatPanel({ conversationId, role, name, token, placeholder }) {
+export default function ChatPanel({ conversationId, role, name, token, placeholder, onRejected }) {
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [peerTyping, setPeerTyping] = useState(false)
@@ -25,6 +25,7 @@ export default function ChatPanel({ conversationId, role, name, token, placehold
     name,
     token,
     onMessage: handleIncoming,
+    onRejected,
   })
   const { notifyTyping, notifyStopped } = useTypingSignal(send)
 

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createConversation, getOnlineAgentCount } from '../api'
+import { CLOSE_BAD_REQUEST } from '../closeCodes'
 import ChatPanel from '../components/ChatPanel'
 import './ClientWidget.css'
 
@@ -21,6 +22,7 @@ export default function ClientWidget() {
   const [conversationId, setConversationId] = useState(sessionStorage.getItem(CONVO_KEY))
   const [clientToken, setClientToken] = useState(sessionStorage.getItem(CLIENT_TOKEN_KEY))
   const [onlineAgentCount, setOnlineAgentCount] = useState(null)
+  const recoveredRef = useRef(false)
   const [name] = useState(() => {
     const existing = sessionStorage.getItem(NAME_KEY)
     if (existing) return existing
@@ -58,6 +60,18 @@ export default function ClientWidget() {
       clearInterval(interval)
     }
   }, [])
+
+  // The stored conversation is gone or no longer ours (e.g. the backend's
+  // database was reset), so start a fresh one. Only once per page load, so a
+  // server that keeps refusing can't make this create conversations in a loop.
+  const handleRejected = (code) => {
+    if (code === CLOSE_BAD_REQUEST || recoveredRef.current) return
+    recoveredRef.current = true
+    sessionStorage.removeItem(CONVO_KEY)
+    sessionStorage.removeItem(CLIENT_TOKEN_KEY)
+    setConversationId(null)
+    setClientToken(null)
+  }
 
   return (
     <div className="widget-stage">
@@ -101,6 +115,7 @@ export default function ClientWidget() {
                 name={name}
                 token={clientToken}
                 placeholder="How can we help?"
+                onRejected={handleRejected}
               />
             ) : (
               <p className="widget-window__loading">Connecting…</p>

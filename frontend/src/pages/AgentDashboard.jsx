@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listConversations, updateConversation, WS_BASE } from '../api'
+import { CLOSE_UNAUTHORIZED } from '../closeCodes'
 import ChatPanel from '../components/ChatPanel'
 import TicketDetailPanel from '../components/TicketDetailPanel'
 import AgentLogin from '../components/AgentLogin'
@@ -49,17 +50,20 @@ export default function AgentDashboard() {
     setAgentToken(token)
   }
 
+  const rejectToken = useCallback(() => {
+    sessionStorage.removeItem(TOKEN_KEY)
+    setAuthError(REJECTED_TOKEN_MESSAGE)
+    setAgentToken('')
+  }, [])
+
   useEffect(() => {
     if (!agentToken) return
     listConversations(agentToken)
       .then(setConversations)
       .catch((err) => {
-        if (err.message !== 'unauthorized') return
-        sessionStorage.removeItem(TOKEN_KEY)
-        setAuthError(REJECTED_TOKEN_MESSAGE)
-        setAgentToken('')
+        if (err.message === 'unauthorized') rejectToken()
       })
-  }, [agentToken])
+  }, [agentToken, rejectToken])
 
   useEffect(() => {
     if (!agentToken) return
@@ -90,12 +94,10 @@ export default function AgentDashboard() {
       ws.onclose = (evt) => {
         if (cancelled) return
 
-        // 4401 = the token was rejected server-side — bounce back to the
-        // login screen instead of retrying with a token that won't work.
-        if (evt.code === 4401) {
-          sessionStorage.removeItem(TOKEN_KEY)
-          setAuthError(REJECTED_TOKEN_MESSAGE)
-          setAgentToken('')
+        // The token was rejected server-side — bounce back to the login
+        // screen instead of retrying with a token that won't work.
+        if (evt.code === CLOSE_UNAUTHORIZED) {
+          rejectToken()
           return
         }
 
@@ -169,7 +171,7 @@ export default function AgentDashboard() {
       clearTimeout(reconnectTimer)
       ws?.close()
     }
-  }, [agentToken])
+  }, [agentToken, rejectToken])
 
   const openConversation = (id) => {
     setActiveId(id)
@@ -263,6 +265,7 @@ export default function AgentDashboard() {
             name={AGENT_NAME}
             token={agentToken}
             placeholder={`Reply to ${activeConvo.client_name}…`}
+            onRejected={(code) => (code === CLOSE_UNAUTHORIZED ? rejectToken() : setActiveId(null))}
           />
         ) : (
           <div className="dashboard__placeholder">
