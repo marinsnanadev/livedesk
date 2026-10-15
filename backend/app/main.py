@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .database import Base, engine, get_db
+from .database import Base, SessionLocal, engine, get_db
 from .connection_manager import manager, AGENTS_ROOM
 from .schemas import _as_utc_isoformat
 
@@ -28,6 +28,9 @@ if AGENT_TOKEN == "dev-only-agent-token":
 
 def tokens_match(given: str, expected: str) -> bool:
     return secrets.compare_digest(given.encode(), expected.encode())
+
+
+VALID_ROLES = ("client", "agent")
 
 
 def require_agent_token(x_agent_token: str = Header(default="")) -> None:
@@ -137,6 +140,34 @@ async def update_conversation(
     return convo
 
 
+def find_client_token(conversation_id: str) -> str | None:
+    with SessionLocal() as db:
+        convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
+        return convo.client_token if convo else None
+
+
+def save_message(conversation_id: str, role: str, name: str, body: str) -> dict:
+    with SessionLocal() as db:
+        msg = models.Message(
+            conversation_id=conversation_id,
+            sender_role=role,
+            sender_name=name,
+            body=body[:4000],
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+        return {
+            "type": "message",
+            "id": msg.id,
+            "conversation_id": conversation_id,
+            "sender_role": role,
+            "sender_name": name,
+            "body": msg.body,
+            "created_at": _as_utc_isoformat(msg.created_at),
+        }
+
+
 # ---------- WebSocket: the live layer ----------
 #
 # Two kinds of sockets:
@@ -169,14 +200,21 @@ async def conversation_room(
     name: str = "Visitor",
     token: str = "",
 ):
+    if role not in VALID_ROLES:
+        await websocket.close(code=4400)
+        return
+
     if role == "agent" and not tokens_match(token, AGENT_TOKEN):
         await websocket.close(code=4401)
         return
 
-    db = next(get_db())
-    convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
-    if not convo:
+    client_token = find_client_token(conversation_id)
+    if client_token is None:
         await websocket.close(code=4404)
+        return
+
+    if role == "client" and not tokens_match(token, client_token):
+        await websocket.close(code=4401)
         return
 
     await manager.connect(websocket, conversation_id, role=role, name=name)
@@ -215,30 +253,12 @@ async def conversation_room(
                     await websocket.send_text(json.dumps({"type": "error", "detail": "message body is required"}))
                     continue
 
-                msg = models.Message(
-                    conversation_id=conversation_id,
-                    sender_role=role,
-                    sender_name=name,
-                    body=body[:4000],
-                )
-                db.add(msg)
-                db.commit()
-                db.refresh(msg)
-
-                payload = {
-                    "type": "message",
-                    "id": msg.id,
-                    "conversation_id": conversation_id,
-                    "sender_role": role,
-                    "sender_name": name,
-                    "body": msg.body,
-                    "created_at": _as_utc_isoformat(msg.created_at),
-                }
+                payload = save_message(conversation_id, role, name, body)
                 await manager.broadcast(conversation_id, payload)
                 await manager.broadcast(AGENTS_ROOM, {
                     "type": "new_message",
                     "conversation_id": conversation_id,
-                    "preview": msg.body[:80],
+                    "preview": payload["body"][:80],
                     "sender_role": role,
                 })
 
@@ -261,5 +281,3 @@ async def conversation_room(
                 "status": "offline",
                 "name": name,
             })
-    finally:
-        db.close()

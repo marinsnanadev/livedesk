@@ -7,17 +7,36 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
+
+import app.main as app_main
 from app.main import app, AGENT_TOKEN
 
 client = TestClient(app)
 AGENT_HEADERS = {"X-Agent-Token": AGENT_TOKEN}
 
 
-def _create_conversation(name="Test Visitor"):
+def _new_conversation(name="Test Visitor"):
     resp = client.post("/api/conversations", json={"client_name": name})
     assert resp.status_code == 200
-    return resp.json()["id"]
+    return resp.json()
+
+
+def _create_conversation(name="Test Visitor"):
+    return _new_conversation(name)["id"]
+
+
+def _client_url(convo, name="Tester"):
+    return f"/ws/conversations/{convo['id']}?role=client&name={name}&token={convo['client_token']}"
+
+
+def _close_code_when_rejected(url):
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with client.websocket_connect(url):
+            pass
+    return exc.value.code
 
 
 def test_health():
@@ -69,9 +88,10 @@ def test_create_and_list_conversation():
 
 
 def test_message_round_trip_over_websocket():
-    convo_id = _create_conversation("Maria")
+    convo = _new_conversation("Maria")
+    convo_id = convo["id"]
 
-    with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Maria") as client_ws, \
+    with client.websocket_connect(_client_url(convo, "Maria")) as client_ws, \
          client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Amy&token={AGENT_TOKEN}") as agent_ws:
 
         client_ws.send_json({"type": "message", "body": "Hi, I need help"})
@@ -91,9 +111,10 @@ def test_message_round_trip_over_websocket():
 
 
 def test_typing_event_is_not_persisted():
-    convo_id = _create_conversation("Joao")
+    convo = _new_conversation("Joao")
+    convo_id = convo["id"]
 
-    with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Joao") as client_ws, \
+    with client.websocket_connect(_client_url(convo, "Joao")) as client_ws, \
          client.websocket_connect(f"/ws/conversations/{convo_id}?role=agent&name=Amy&token={AGENT_TOKEN}") as agent_ws:
 
         client_ws.send_json({"type": "typing", "is_typing": True})
@@ -200,10 +221,74 @@ def test_conversation_room_rejects_agent_role_without_token():
         assert exc.code == 4401
 
 
-def test_conversation_room_still_allows_client_role_without_token():
-    convo_id = _create_conversation("Open To Clients")
-    with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Visitor"):
-        pass  # connecting without raising is the assertion — clients never needed a token
+def test_conversation_room_requires_the_conversation_client_token():
+    # Regression test: role=client used to need no credential at all, so
+    # anyone who knew a conversation id could join it and post as the visitor.
+    mine = _new_conversation("Mine")
+    other = _new_conversation("Other")
+    base = f"/ws/conversations/{mine['id']}?role=client&name=Intruder"
+
+    assert _close_code_when_rejected(base) == 4401
+    assert _close_code_when_rejected(base + "&token=guess") == 4401
+    assert _close_code_when_rejected(base + f"&token={other['client_token']}") == 4401
+    assert _close_code_when_rejected(base + f"&token={AGENT_TOKEN}") == 4401
+
+    with client.websocket_connect(base + f"&token={mine['client_token']}"):
+        pass  # connecting without raising is the assertion
+
+
+def test_conversation_room_rejects_unknown_roles():
+    # Regression test: any role other than client/agent used to be accepted
+    # at the handshake and then blew up with a 500 on the first message,
+    # because the value doesn't exist in the SenderRole enum.
+    convo = _new_conversation("Role Check")
+    for role in ("hacker", "", "AGENT"):
+        url = f"/ws/conversations/{convo['id']}?role={role}&name=Z&token={convo['client_token']}"
+        assert _close_code_when_rejected(url) == 4400
+        assert _close_code_when_rejected(url.replace(convo["client_token"], AGENT_TOKEN)) == 4400
+
+
+def test_conversation_room_rejects_unknown_conversation():
+    assert _close_code_when_rejected("/ws/conversations/does-not-exist?role=client&token=x") == 4404
+    url = f"/ws/conversations/does-not-exist?role=agent&token={AGENT_TOKEN}"
+    assert _close_code_when_rejected(url) == 4404
+
+
+@pytest.fixture
+def tracked_sessions(monkeypatch):
+    opened = []
+    real_factory = app_main.SessionLocal
+
+    def factory():
+        session = real_factory()
+        opened.append(session)
+        return session
+
+    monkeypatch.setattr(app_main, "SessionLocal", factory)
+    return opened
+
+
+def test_rejected_connection_does_not_leave_a_db_session_open(tracked_sessions):
+    # Regression test: the handshake opened a session before checking the
+    # conversation exists, then returned on a 4404 without ever closing it.
+    assert _close_code_when_rejected("/ws/conversations/does-not-exist?role=client&token=x") == 4404
+
+    assert tracked_sessions
+    assert not any(s.in_transaction() for s in tracked_sessions)
+
+
+def test_open_connection_does_not_hold_a_db_session(tracked_sessions):
+    # Regression test: each socket used to keep one session (and so one pool
+    # connection) for its whole lifetime, which exhausts the pool on Postgres.
+    convo = _new_conversation("Idle Connection")
+    tracked_sessions.clear()
+
+    with client.websocket_connect(_client_url(convo)) as ws:
+        ws.send_json({"type": "message", "body": "hello"})
+        ws.receive_json()
+
+        assert tracked_sessions
+        assert not any(s.in_transaction() for s in tracked_sessions)
 
 
 def test_suite_never_writes_to_the_real_dev_database():
@@ -223,12 +308,13 @@ def test_timestamps_are_serialized_as_explicit_utc():
     # `new Date(...)` in the browser as *local* time instead of UTC,
     # throwing off every "Xmin ago" label by the viewer's UTC offset.
     # A correctly UTC-tagged value always ends in "+00:00" or "Z".
-    convo_id = _create_conversation("Timezone Tester")
+    convo = _new_conversation("Timezone Tester")
+    convo_id = convo["id"]
 
-    convo = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
-    assert convo["created_at"].endswith("+00:00") or convo["created_at"].endswith("Z")
+    listed = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
+    assert listed["created_at"].endswith("+00:00") or listed["created_at"].endswith("Z")
 
-    with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Timezone Tester") as ws:
+    with client.websocket_connect(_client_url(convo, "Timezone")) as ws:
         ws.send_json({"type": "message", "body": "checking timestamps"})
         event = ws.receive_json()
         assert event["created_at"].endswith("+00:00") or event["created_at"].endswith("Z")
@@ -241,9 +327,9 @@ def test_invalid_json_does_not_crash_the_connection():
     # Regression test: `json.loads` used to raise JSONDecodeError straight
     # out of the receive loop, killing the whole connection on one bad frame
     # instead of just rejecting it.
-    convo_id = _create_conversation("Bad JSON Sender")
+    convo = _new_conversation("Bad JSON Sender")
 
-    with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Tester") as ws:
+    with client.websocket_connect(_client_url(convo)) as ws:
         ws.send_text("not valid json{{{")
         error = ws.receive_json()
         assert error["type"] == "error"
@@ -259,14 +345,14 @@ def test_message_without_body_is_rejected_not_crashed():
     # Regression test: `event["body"]` used to raise a KeyError straight out
     # of the receive loop when a client sent {"type": "message"} with no
     # "body" field.
-    convo_id = _create_conversation("Missing Body Sender")
+    convo = _new_conversation("Missing Body Sender")
 
-    with client.websocket_connect(f"/ws/conversations/{convo_id}?role=client&name=Tester") as ws:
+    with client.websocket_connect(_client_url(convo)) as ws:
         ws.send_json({"type": "message"})
         error = ws.receive_json()
         assert error["type"] == "error"
 
-    history = client.get(f"/api/conversations/{convo_id}/messages", headers=AGENT_HEADERS).json()
+    history = client.get(f"/api/conversations/{convo['id']}/messages", headers=AGENT_HEADERS).json()
     assert history == []
 
 
