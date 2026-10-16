@@ -7,15 +7,14 @@ is just a DATABASE_URL change — no code changes needed.
 """
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
+from .config import settings
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./livedesk.db")
+DATABASE_URL = settings.database_url
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+# pre_ping quietly replaces connections the host dropped while the app was idle.
+engine = create_engine(DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

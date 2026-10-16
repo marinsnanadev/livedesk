@@ -42,10 +42,15 @@ uvicorn app.main:app --reload OR python -m uvicorn app.main:app --reload
 
 The API comes up at `http://localhost:8000`. Tests: `pytest -v`.
 
-`.env` sets `AGENT_TOKEN` — the shared secret the agent dashboard needs to
-connect as `role=agent` (both over the websocket and on the ticket-update
-endpoint). Without it, the app falls back to a well-known dev default and
-prints a warning on startup; set your own for anything beyond local testing.
+Everything the backend reads from the environment is listed in
+`backend/.env.example`:
+
+| Variable | What it does |
+| --- | --- |
+| `AGENT_TOKEN` | Shared secret for `role=agent` (websocket and agent-only endpoints). Unset or blank falls back to a well-known dev default and logs a warning. |
+| `APP_ENV` | Set to `production` and the app refuses to start on the default token. |
+| `DATABASE_URL` | SQLite by default. Both `postgres://` and `postgresql://` URLs work. |
+| `CORS_ORIGINS` | Comma-separated frontend origins allowed to call the API (defaults to the local Vite dev server). |
 
 ### Frontend
 
@@ -81,12 +86,9 @@ The backend is a standard FastAPI app (works well on Render or Fly.io's free
 tiers — both handle WebSockets fine). The frontend is a static Vite build
 (Vercel or Netlify).
 
-1. **Backend:** deploy the `backend/` folder, set `AGENT_TOKEN` (a real
-   secret, not the dev default) and `DATABASE_URL` (Postgres in production —
-   swapping from SQLite needs no code changes) as environment variables.
+1. **Backend:** deploy the `backend/` folder and set `APP_ENV=production`,
+   `AGENT_TOKEN` (a real secret), `DATABASE_URL` (Postgres) and
+   `CORS_ORIGINS` (your frontend's origin) as environment variables.
 2. **Frontend:** deploy the `frontend/` folder, set `VITE_API_BASE` to the
    backend's deployed URL.
-3. Update `app.add_middleware(CORSMiddleware, allow_origins=[...])` in
-   `backend/app/main.py` to your frontend's real origin instead of `*` before
-   going live.
-4. Drop the live link at the top of this README once it's up.
+3. Drop the live link at the top of this README once it's up.

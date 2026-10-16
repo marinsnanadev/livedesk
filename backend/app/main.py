@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-import os
+import logging
 import secrets
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header
@@ -8,22 +8,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from . import models, schemas
+from .config import settings
 from .database import Base, SessionLocal, engine, get_db
 from .connection_manager import manager, AGENTS_ROOM
 from .schemas import _as_utc_isoformat
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
+logger = logging.getLogger("livedesk")
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="LiveDesk API")
 
-# Gate for role=agent on the websocket handshake — without this, anyone
-# who knows the URL shape can open a socket as an "agent" and read every
-# conversation. Not real auth (no per-agent identity, one shared secret),
-# but it closes the obvious hole for a demo project. Set AGENT_TOKEN in
-# your environment/.env for anything beyond local testing.
-AGENT_TOKEN = os.getenv("AGENT_TOKEN", "dev-only-agent-token")
-if AGENT_TOKEN == "dev-only-agent-token":
-    print("[livedesk] WARNING: using the default AGENT_TOKEN — set your own via env for anything beyond local dev.")
+# Shared secret for role=agent. Not real auth (no per-agent identity), but it
+# keeps strangers out of the agent socket and the agent-only endpoints.
+AGENT_TOKEN = settings.agent_token
+if settings.uses_default_token:
+    logger.warning("using the default AGENT_TOKEN — set your own for anything beyond local dev")
+logger.info("starting in %s mode, CORS origins: %s", settings.app_env, settings.cors_origins)
 
 
 def tokens_match(given: str, expected: str) -> bool:
@@ -39,7 +41,7 @@ def require_agent_token(x_agent_token: str = Header(default="")) -> None:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to your frontend origin in production
+    allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -144,6 +146,7 @@ async def reject(websocket: WebSocket, code: int) -> None:
     # Closing before accept() makes the server answer the upgrade with a plain
     # HTTP 403, and browsers never see the close code. Accept first so the
     # client actually receives 4400/4401/4404.
+    logger.info("rejected websocket %s with %s", websocket.url.path, code)
     await websocket.accept()
     await websocket.close(code=code)
 
