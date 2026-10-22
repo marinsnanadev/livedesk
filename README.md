@@ -2,6 +2,13 @@
 
 Live support chat with real-time presence, a "typing…" indicator, and persisted history — a mini Intercom/Zendesk built to show how to actually solve real-time state, not just "send a message and have it show up on screen."
 
+## Preview 
+
+### User screen (Left) and Support screen (right)
+
+[▶ Watch the LiveDesk demo](./frontend/src/demo/livedesk.mp4)
+
+
 ## Why this project
 
 A chat with API fetches is a commodity. What sets this project apart is the clear separation between two layers of state:
