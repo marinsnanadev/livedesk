@@ -1,107 +1,231 @@
-# LiveDesk
+# LiveDesk — Real-Time Customer Support Chat
 
-Live support chat with real-time presence, a "typing…" indicator, and persisted history — a mini Intercom/Zendesk built to show how to actually solve real-time state, not just "send a message and have it show up on screen."
+A real-time customer support chat application built with React and FastAPI. LiveDesk provides a visitor-facing support widget and an agent dashboard, with persistent conversations and messages, live presence and typing indicators, and ticket status, priority, and assignment controls.
 
-## Why this project
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?logo=fastapi)
+![SQLite](https://img.shields.io/badge/SQLite-07405E?logo=sqlite&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-supported-4169E1?logo=postgresql&logoColor=white)
+![WebSockets](https://img.shields.io/badge/real--time-WebSockets-333333)
 
-A chat with API fetches is a commodity. What sets this project apart is the clear separation between two layers of state:
+---
 
-- **Durable state** (messages, conversations) — lives in the database (SQLite by default, swap to Postgres just by changing `DATABASE_URL`, no code changes needed).
-- **Live state** (who's online, who's typing) — lives only in memory in the backend's `ConnectionManager`, is never persisted, and disappears the moment nobody is listening.
+## Preview
 
-This separation is the architectural core of the project — and it's exactly the question that tends to come up in technical interviews: *"how do you handle N clients connected at the same time, and what happens when one of them drops?"*
+### Visitor support page
+![Client support page](frontend/src/preview/client-home.gif)
 
-## Architecture
+### Agent login
+![Agent login](frontend/src/preview/analist-login.gif)
 
+### Agent dashboard and conversations
+![Agent dashboard](frontend/src/preview/analist-home.gif)
+
+---
+
+## About the project
+
+LiveDesk is a small customer support platform built to demonstrate how persistent data and real-time state can work together:
+
+- **Durable state** — conversations, messages, status, priority, and assignment are stored in a relational database.
+- **Live state** — agent presence, visitor presence, and typing indicators are kept in the backend's in-memory connection manager and are not persisted.
+- **Real-time updates** — WebSockets deliver messages and activity to the relevant conversation and agent dashboard.
+
+Messages are saved before they are broadcast, so the displayed conversation stays consistent with its history. Each conversation has its own room; agents also join a shared feed to receive new-conversation, presence, and ticket-update events.
+
+## Technology stack
+
+**Frontend**
+- React 18
+- Vite
+- React Router
+- Custom CSS with a shared design-token system
+- Node.js tests for frontend utilities
+- Vercel or Netlify for static hosting
+
+**Backend**
+- Python
+- FastAPI and native WebSockets
+- SQLAlchemy and Alembic
+- SQLite for local development; PostgreSQL is supported through `DATABASE_URL`
+- Uvicorn
+- pytest and FastAPI `TestClient`
+- Render deployment configuration included in `render.yaml`
+
+## Features
+
+- Visitor support page with an embedded chat experience
+- Agent dashboard with a live conversation list
+- Persistent conversation and message history
+- Real-time messages, typing indicators, and client/agent presence
+- Live online-agent count on the visitor page
+- Conversation status (`open`, `in_progress`, or `resolved`)
+- Conversation priority (`low`, `medium`, `high`, or `urgent`)
+- Assignment field and live ticket updates for connected agents
+- WebSocket reconnection with exponential backoff
+- Conversation-specific client tokens for visitor access
+- Agent-only REST endpoints and WebSocket access protected by `AGENT_TOKEN`
+- Alembic migrations, including a test that checks migration/model consistency
+- Backend tests plus frontend linting, tests, and production build in CI
+
+### Authentication note
+
+Agent access currently uses one shared `AGENT_TOKEN`; there are no individual agent accounts or roles. The development default is `dev-only-agent-token` and must not be used in production. When `APP_ENV=production`, the backend refuses to start if the default token is still configured. Visitor access is scoped to a conversation using a `client_token` issued when the conversation is created.
+
+## API
+
+Interactive API documentation is available at `/docs` while the backend is running.
+
+### REST endpoints
+
+| Method | Route | Description | Access |
+|--------|-------|-------------|--------|
+| GET | `/api/health` | Health check | Public |
+| GET | `/api/agents/online-count` | Number of connected agents | Public |
+| POST | `/api/conversations` | Creates a conversation and returns its client token | Public |
+| GET | `/api/conversations` | Lists conversations | `X-Agent-Token` header |
+| GET | `/api/conversations/{conversation_id}/messages` | Returns conversation history | `X-Agent-Token` or matching `X-Client-Token` header |
+| PATCH | `/api/conversations/{conversation_id}` | Updates status, priority, or assignment | `X-Agent-Token` header |
+
+### WebSocket endpoints
+
+| Route | Description | Access |
+|-------|-------------|--------|
+| `/ws/agents?name={name}&token={agent_token}` | Agent feed for conversation activity and presence | Agent token |
+| `/ws/conversations/{conversation_id}?role=client&name={name}&token={client_token}` | Visitor chat room | Conversation's client token |
+| `/ws/conversations/{conversation_id}?role=agent&name={name}&token={agent_token}` | Agent chat room | Agent token |
+
+The conversation WebSocket supports `message` and `typing` events. Messages are persisted; typing events are transient and broadcast only to connected participants.
+
+## Running the project locally
+
+### Prerequisites
+
+- Python 3.12
+- Node.js 20 and npm
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/marinsnanadev/livedesk.git
+cd livedesk
 ```
-Client (widget)   ──┐
-                     ├──WebSocket──► FastAPI (ConnectionManager) ──► SQLite/Postgres
-Agent (dashboard) ──┘
-```
 
-- Each conversation is a "room" — sockets only receive events from their own room.
-- Agents also join a global room (`agents`), so they can see new conversations and presence in real time in the sidebar, even without an open conversation.
-- Messages are persisted **before** being broadcast — history is never inconsistent with what was shown live.
-- "Typing" events never touch the database.
-- Ticket status, priority, and assignment are persisted too — updating one broadcasts a `ticket_updated` event to every connected agent, so two dashboards never disagree about who owns a ticket.
-- The frontend automatically reconnects with exponential backoff if the socket drops.
-- `role=agent` is gated by a shared `AGENT_TOKEN`, checked on the websocket handshake and on every agent REST endpoint (listing and updating tickets) — without it, anyone who knows the URL shape could open a socket as an "agent" and read every conversation. Visitors get a per-conversation `client_token` when their chat is created, and that is what lets them read, join, and post in that conversation.
+### 2. Start the backend
 
-## Running locally
-
-### Backend
-
-```
+```bash
 cd backend
-pip install -r requirements.txt
+python -m venv .venv
+```
+
+Copy the example environment file to `.env`:
+
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+```bash
+# macOS / Linux
 cp .env.example .env
+```
+
+Activate the environment:
+
+```powershell
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+```
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+```
+
+Install dependencies, apply the database migration, and start the API:
+
+```bash
+pip install -r requirements.txt
+```
+
+```bash
 alembic upgrade head
-uvicorn app.main:app --reload OR python -m uvicorn app.main:app --reload
+uvicorn app.main:app --reload
 ```
 
-The API comes up at `http://localhost:8000`. Tests: `pytest -v`.
+The backend is available at `http://localhost:8000`. The API documentation is at `http://localhost:8000/docs`.
 
-The schema lives in Alembic migrations (`backend/alembic/versions`), so run
-`alembic upgrade head` once before the first start and again after pulling a
-change that adds a migration. After changing a model, generate the migration
-with `alembic revision --autogenerate -m "what changed"` and read it before
-committing — a test fails if the models and the migrations drift apart.
+The local defaults work without changing the example environment values. Set these variables in `backend/.env` when needed:
 
-Everything the backend reads from the environment is listed in
-`backend/.env.example`:
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `APP_ENV` | Application environment. Set to `production` to enforce a non-default agent token. | `development` |
+| `AGENT_TOKEN` | Shared secret for agent REST endpoints and WebSockets. Use a strong, private value outside local development. | `dev-only-agent-token` |
+| `DATABASE_URL` | SQLAlchemy database URL. SQLite is used locally; PostgreSQL URLs are supported. | `sqlite:///./livedesk.db` |
+| `CORS_ORIGINS` | Comma-separated frontend origins allowed to call the API. | `http://localhost:5173,http://127.0.0.1:5173` |
 
-| Variable | What it does |
-| --- | --- |
-| `AGENT_TOKEN` | Shared secret for `role=agent` (websocket and agent-only endpoints). Unset or blank falls back to a well-known dev default and logs a warning. |
-| `APP_ENV` | Set to `production` and the app refuses to start on the default token. |
-| `DATABASE_URL` | SQLite by default. Both `postgres://` and `postgresql://` URLs work (the psycopg 3 driver is used). |
-| `CORS_ORIGINS` | Comma-separated frontend origins allowed to call the API (defaults to the local Vite dev server). |
+#### Backend tests
 
-### Frontend
+From the `backend` directory, with the virtual environment active:
 
+```bash
+pytest -v
 ```
+
+### 3. Start the frontend
+
+In a second terminal:
+
+```bash
 cd frontend
 npm install
+```
+
+If you need to change the API URL, copy `.env.example` to `.env` in the `frontend` directory:
+
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+```bash
+# macOS / Linux
 cp .env.example .env
+```
+
+The default API URL is `http://localhost:8000`. Start Vite:
+
+```bash
 npm run dev
 ```
 
-- **Agent dashboard:** `http://localhost:5173/` — asks for the `AGENT_TOKEN` from the backend's `.env` on first load.
-- **Client widget (visitor view):** `http://localhost:5173/widget`
+Open the agent dashboard at `http://localhost:5173/` and enter the backend's `AGENT_TOKEN`. Open the visitor experience at `http://localhost:5173/widget`. Use both routes in separate tabs to try a conversation.
 
-Open both routes in separate tabs to simulate a real conversation between client and agent.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_BASE` | Base URL for the backend API. WebSocket URLs are derived from this value. | `http://localhost:8000` |
 
-## Stack
+#### Frontend tests and build
 
-- **Backend:** FastAPI, native WebSockets, SQLAlchemy, SQLite (easy swap to Postgres in production)
-- **Frontend:** React, Vite, React Router — no UI framework, custom CSS with a token system
-- **Tests:** pytest + FastAPI's `TestClient`, covering the full connection and message-exchange flow
-- **CI:** GitHub Actions running the backend tests and the frontend build on every push
+From the `frontend` directory:
 
-## Possible next steps
+```bash
+npm run lint
+npm test
+npm run build
+```
 
-- Per-agent identity (today it's one shared token for every agent, not individual accounts/logins)
-- Rate limiting on message sends, to prevent a single connection from flooding a room
-- Close/reopen conversations from the UI
-- Push notification when the agent is offline
+## Roadmap
 
-## Deploying
+- Add individual agent identities and authentication
+- Add rate limiting for message sends
+- Support closing and reopening conversations from the interface
+- Add push notifications when agents are offline
 
-The backend is a standard FastAPI app and WebSockets work fine on Render. The
-frontend is a static Vite build (Vercel or Netlify).
+## Author
 
-1. **Backend (Render):** create a new Blueprint from this repo. `render.yaml`
-   provisions the Postgres database and the web service, and its start command
-   runs `alembic upgrade head` before the server. Render generates
-   `AGENT_TOKEN` for you (read it from the service's Environment tab — it's the
-   token you log into the dashboard with). Check Render's current free-tier
-   limits for the database before relying on it long term.
-2. **Frontend:** deploy the `frontend/` folder to Vercel or Netlify and set
-   `VITE_API_BASE` to the backend's URL. `vercel.json` and `public/_redirects`
-   make `/widget` and other routes survive a page refresh.
-3. **CORS:** back on Render, set `CORS_ORIGINS` to the frontend's URL, since
-   the API only accepts the origins listed there.
-4. Drop the live link at the top of this README once it's up.
+Developed by **Nana** — Software Engineering student, with prior experience as a full-stack developer.
 
-Any other host works too: set the four variables from the table above and run
-`alembic upgrade head` before starting `uvicorn`.
+[GitHub](https://github.com/marinsnanadev) 
+[LinkedIn](https://www.linkedin.com/in/gianna-marins-734944234/)
