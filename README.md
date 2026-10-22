@@ -37,10 +37,17 @@ Agent (dashboard) ──┘
 cd backend
 pip install -r requirements.txt
 cp .env.example .env
+alembic upgrade head
 uvicorn app.main:app --reload OR python -m uvicorn app.main:app --reload
 ```
 
 The API comes up at `http://localhost:8000`. Tests: `pytest -v`.
+
+The schema lives in Alembic migrations (`backend/alembic/versions`), so run
+`alembic upgrade head` once before the first start and again after pulling a
+change that adds a migration. After changing a model, generate the migration
+with `alembic revision --autogenerate -m "what changed"` and read it before
+committing — a test fails if the models and the migrations drift apart.
 
 Everything the backend reads from the environment is listed in
 `backend/.env.example`:
@@ -49,7 +56,7 @@ Everything the backend reads from the environment is listed in
 | --- | --- |
 | `AGENT_TOKEN` | Shared secret for `role=agent` (websocket and agent-only endpoints). Unset or blank falls back to a well-known dev default and logs a warning. |
 | `APP_ENV` | Set to `production` and the app refuses to start on the default token. |
-| `DATABASE_URL` | SQLite by default. Both `postgres://` and `postgresql://` URLs work. |
+| `DATABASE_URL` | SQLite by default. Both `postgres://` and `postgresql://` URLs work (the psycopg 3 driver is used). |
 | `CORS_ORIGINS` | Comma-separated frontend origins allowed to call the API (defaults to the local Vite dev server). |
 
 ### Frontend
@@ -82,13 +89,21 @@ Open both routes in separate tabs to simulate a real conversation between client
 
 ## Deploying
 
-The backend is a standard FastAPI app (works well on Render or Fly.io's free
-tiers — both handle WebSockets fine). The frontend is a static Vite build
-(Vercel or Netlify).
+The backend is a standard FastAPI app and WebSockets work fine on Render. The
+frontend is a static Vite build (Vercel or Netlify).
 
-1. **Backend:** deploy the `backend/` folder and set `APP_ENV=production`,
-   `AGENT_TOKEN` (a real secret), `DATABASE_URL` (Postgres) and
-   `CORS_ORIGINS` (your frontend's origin) as environment variables.
-2. **Frontend:** deploy the `frontend/` folder, set `VITE_API_BASE` to the
-   backend's deployed URL.
-3. Drop the live link at the top of this README once it's up.
+1. **Backend (Render):** create a new Blueprint from this repo. `render.yaml`
+   provisions the Postgres database and the web service, and its start command
+   runs `alembic upgrade head` before the server. Render generates
+   `AGENT_TOKEN` for you (read it from the service's Environment tab — it's the
+   token you log into the dashboard with). Check Render's current free-tier
+   limits for the database before relying on it long term.
+2. **Frontend:** deploy the `frontend/` folder to Vercel or Netlify and set
+   `VITE_API_BASE` to the backend's URL. `vercel.json` and `public/_redirects`
+   make `/widget` and other routes survive a page refresh.
+3. **CORS:** back on Render, set `CORS_ORIGINS` to the frontend's URL, since
+   the API only accepts the origins listed there.
+4. Drop the live link at the top of this README once it's up.
+
+Any other host works too: set the four variables from the table above and run
+`alembic upgrade head` before starting `uvicorn`.

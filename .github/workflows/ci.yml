@@ -9,6 +9,20 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: livedesk
+          POSTGRES_PASSWORD: livedesk
+          POSTGRES_DB: test_livedesk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U livedesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -22,8 +36,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run tests (SQLite)
         run: pytest -v
+
+      - name: Run tests (Postgres)
+        run: pytest -v
+        env:
+          TEST_DATABASE_URL: postgres://livedesk:livedesk@localhost:5432/test_livedesk
 
   frontend-build:
     runs-on: ubuntu-latest

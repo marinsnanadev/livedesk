@@ -57,7 +57,7 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(String, primary_key=True, default=new_id)
-    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False, index=True)
     sender_role = Column(SAEnum(SenderRole), nullable=False)
     sender_name = Column(String, nullable=False)
     body = Column(String, nullable=False)

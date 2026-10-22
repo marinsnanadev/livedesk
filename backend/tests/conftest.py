@@ -34,4 +34,12 @@ if os.path.exists(TEST_DB_PATH):
 # "test_livedesk": a test further down checks for it, so the suite can't be
 # pointed at a real database by accident.
 os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or f"sqlite:///{TEST_DB_PATH}"
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..")
+sys.path.insert(0, BACKEND_DIR)
+
+# The app no longer creates its own tables; the schema comes from the
+# migrations, so the suite exercises them on every run.
+from alembic import command  # noqa: E402
+from alembic.config import Config  # noqa: E402
+
+command.upgrade(Config(os.path.join(BACKEND_DIR, "alembic.ini")), "head")

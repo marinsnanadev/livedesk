@@ -9,14 +9,12 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 from .config import settings
-from .database import Base, SessionLocal, engine, get_db
+from .database import SessionLocal, get_db
 from .connection_manager import manager, AGENTS_ROOM
 from .schemas import _as_utc_isoformat
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("livedesk")
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="LiveDesk API")
 
