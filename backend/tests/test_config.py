@@ -1,21 +1,34 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import make_url
 
 from app.config import DEFAULT_AGENT_TOKEN, load_settings, normalize_database_url
 from app.main import app
 
 
-def test_postgres_scheme_is_rewritten_for_sqlalchemy():
+def test_postgres_urls_are_rewritten_for_sqlalchemy():
     # Regression test: Render and Heroku hand out postgres://, which
-    # SQLAlchemy 2 refuses ("Can't load plugin: sqlalchemy.dialects:postgres").
-    assert normalize_database_url("postgres://u:p@host:5432/db") == "postgresql://u:p@host:5432/db"
-    assert normalize_database_url("postgresql://u:p@host/db") == "postgresql://u:p@host/db"
+    # SQLAlchemy refuses ("Can't load plugin: sqlalchemy.dialects:postgres").
+    assert normalize_database_url("postgres://u:p@host:5432/db") == "postgresql+psycopg://u:p@host:5432/db"
     assert normalize_database_url("sqlite:///./livedesk.db") == "sqlite:///./livedesk.db"
+
+
+def test_bare_postgresql_url_does_not_depend_on_the_sqlalchemy_default_driver():
+    # Regression test: SQLAlchemy 2.0 resolves postgresql:// to psycopg2 and
+    # 2.1 to psycopg 3, so an unpinned install picked a driver that
+    # requirements.txt didn't ship, and the app died on import in production.
+    assert normalize_database_url("postgresql://u:p@host/db") == "postgresql+psycopg://u:p@host/db"
+    assert normalize_database_url("postgresql+asyncpg://u:p@host/db") == "postgresql+asyncpg://u:p@host/db"
+
+
+def test_the_postgres_driver_is_actually_installed():
+    url = make_url(normalize_database_url("postgres://u:p@host/db"))
+    assert url.get_dialect().import_dbapi().__name__ == "psycopg"
 
 
 def test_database_url_from_the_environment_is_normalized():
     settings = load_settings({"DATABASE_URL": "postgres://u:p@host/db"})
-    assert settings.database_url == "postgresql://u:p@host/db"
+    assert settings.database_url == "postgresql+psycopg://u:p@host/db"
 
 
 def test_production_refuses_to_start_on_the_default_token():

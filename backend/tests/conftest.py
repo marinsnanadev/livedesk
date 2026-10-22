@@ -29,5 +29,9 @@ TEST_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "test_livedesk.db")
 if os.path.exists(TEST_DB_PATH):
     os.remove(TEST_DB_PATH)
 
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
+# Set TEST_DATABASE_URL to run the suite against another database (e.g. a
+# throwaway Postgres) instead of the local SQLite file. Its name has to contain
+# "test_livedesk": a test further down checks for it, so the suite can't be
+# pointed at a real database by accident.
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or f"sqlite:///{TEST_DB_PATH}"
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

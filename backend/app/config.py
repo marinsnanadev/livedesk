@@ -23,9 +23,12 @@ class Settings:
 
 
 def normalize_database_url(url: str) -> str:
-    # Render and Heroku hand out "postgres://", which SQLAlchemy 2 rejects.
-    if url.startswith("postgres://"):
-        return "postgresql://" + url[len("postgres://"):]
+    # Render and Heroku hand out "postgres://", which SQLAlchemy rejects. And a
+    # bare "postgresql://" picks psycopg2 on SQLAlchemy 2.0 but psycopg 3 on
+    # 2.1, so name the driver instead of depending on the version installed.
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
     return url
 
 
