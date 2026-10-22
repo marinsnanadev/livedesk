@@ -1,174 +1,105 @@
 .widget-stage {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background:
     radial-gradient(circle at 15% 0%, rgba(79, 209, 197, 0.10), transparent 45%),
     var(--bg);
-  padding-bottom: 120px;
 }
 
-.widget-stage__hint {
-  position:absolute;
-  top: var(--space-3);
-  right: var(--space-4);
-  color: var(--text-faint);
-  font-size: 11px;
-  z-index: 1;
-}
-
-/* ---- fictional site chrome, just to give the widget a home ---- */
-
-.site-header {
+.widget-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-5) var(--space-6);
+  width: min(100% - 48px, 1080px);
+  margin: 0 auto;
+  min-height: 76px;
   border-bottom: 1px solid var(--border);
 }
 
-.site-header__logo {
+.widget-header__brand {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
 
-.site-header__nav {
-  display: flex;
-  gap: var(--space-5);
-  font-size: 14px;
+.widget-header__context {
   color: var(--text-muted);
+  font-size: 14px;
 }
 
-.site-hero {
-  max-width: 640px;
-  margin: 0 auto;
+.support-home {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: var(--space-6) var(--space-4);
+}
+
+.support-card {
+  width: min(100%, 560px);
+  padding: clamp(28px, 6vw, 52px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   text-align: center;
-  padding: var(--space-6) var(--space-4) var(--space-5);
 }
 
-.site-hero h1 {
+.support-card h1 {
   font-family: var(--font-display);
-  font-size: 34px;
+  font-size: clamp(30px, 5vw, 42px);
   line-height: 1.15;
+  letter-spacing: -0.03em;
   margin: 0 0 var(--space-3);
 }
 
-.site-hero p {
-  color: var(--text-muted);
-  font-size: 16px;
-  line-height: 1.5;
-  margin: 0 0 var(--space-5);
-}
-
-.site-hero__cta {
-  background: var(--signal);
-  color: #06201d;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: var(--space-3) var(--space-5);
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.site-features {
-  max-width: 900px;
+.support-card__description {
+  max-width: 38ch;
   margin: 0 auto;
-  padding: 0 var(--space-4) var(--space-6);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--space-4);
-}
-
-.feature-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-}
-
-.feature-card h3 {
-  font-family: var(--font-display);
+  color: var(--text-muted);
   font-size: 15px;
-  margin: 0 0 var(--space-2);
+  line-height: 1.5;
 }
 
-.feature-card p {
+.support-card__availability {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 var(--space-4);
   color: var(--text-muted);
   font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
 }
 
-/* ---- support CTA: the thing that must not go unnoticed ---- */
-
-.support-callout {
-  position: fixed;
-  bottom: var(--space-5);
-  right: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-2);
-  z-index: 2;
-}
-
-.support-callout__bubble {
+.support-request-button {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 6px var(--space-3);
-  font-size: 12px;
-  color: var(--text-muted);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
-}
-
-.widget-launcher {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  width: 100%;
+  min-height: 52px;
   background: var(--signal);
   color: #06201d;
   border: none;
-  padding: var(--space-3) var(--space-5);
-  border-radius: 999px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
   font-weight: 700;
-  font-size: 15px;
-  box-shadow: 0 10px 30px rgba(79, 209, 197, 0.35);
+  font-size: 16px;
+  transition: background-color 140ms ease, transform 140ms ease;
 }
 
-.widget-launcher::before {
-  content: "";
-  position: absolute;
-  inset: -6px;
-  border-radius: 999px;
-  border: 1.5px solid var(--signal);
-  opacity: 0.6;
-  animation: launcher-pulse 2.2s ease-out infinite;
-}
-
-@keyframes launcher-pulse {
-  0% { transform: scale(0.92); opacity: 0.6; }
-  100% { transform: scale(1.18); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .widget-launcher::before {
-    animation: none;
-    display: none;
-  }
+.support-request-button:hover {
+  background: #70ded4;
+  transform: translateY(-1px);
 }
 
 .widget-window {
   position: fixed;
   bottom: 100px;
   right: var(--space-5);
-  width: 340px;
-  height: 460px;
+  width: min(380px, calc(100vw - 48px));
+  height: min(520px, calc(100vh - 120px));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -179,22 +110,13 @@
   z-index: 2;
 }
 
-/* A fixed 340px + 24px right offset overflows any viewport under ~364px
-   (e.g. a 320px-wide phone) — the window's edge or the page itself ends
-   up clipped/scrollable sideways. Below that width, span the viewport
-   with margins on both sides instead of a fixed width. */
 @media (max-width: 400px) {
   .widget-window {
     left: var(--space-3);
     right: var(--space-3);
     width: auto;
-    bottom: 88px;
-    height: min(460px, calc(100vh - 160px));
-  }
-
-  .support-callout {
-    right: var(--space-3);
-    bottom: var(--space-4);
+    bottom: var(--space-3);
+    height: calc(100vh - 24px);
   }
 }
 

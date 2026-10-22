@@ -9,14 +9,6 @@ const CONVO_KEY = 'livedesk_conversation_id'
 const CLIENT_TOKEN_KEY = 'livedesk_client_token'
 const AGENT_COUNT_POLL_MS = 20000
 
-// Fictional backdrop content — just enough for the widget to feel like
-// it's embedded on a real product site instead of floating in a void.
-const FEATURES = [
-  { title: 'Real-time boards', body: 'Watch the team work live, no need to refresh the page.' },
-  { title: 'Routine automation', body: 'Simple rules handle the repetitive stuff, your team handles what matters.' },
-  { title: 'Automatic reports', body: 'A weekly summary, ready every Monday at 8am.' },
-]
-
 export default function ClientWidget() {
   const [open, setOpen] = useState(false)
   const [conversationId, setConversationId] = useState(sessionStorage.getItem(CONVO_KEY))
@@ -75,31 +67,36 @@ export default function ClientWidget() {
 
   return (
     <div className="widget-stage">
-      <p className="widget-stage__hint mono">SIMULATION — CLIENT VIEW</p>
-
-      <header className="site-header">
-        <span className="site-header__logo">orbit</span>
-        <nav className="site-header__nav">
-          <span>Product</span>
-          <span>Pricing</span>
-          <span>Help center</span>
-        </nav>
+      <header className="widget-header">
+        <span className="widget-header__brand">livedesk</span>
+        <span className="widget-header__context">Customer support</span>
       </header>
 
-      <section className="site-hero">
-        <h1>Organize your team without losing the rhythm.</h1>
-        <p>Orbit brings tasks, deadlines, and conversations into one place — so nobody ever asks "hey, whatever happened with that?" again.</p>
-        <button className="site-hero__cta">Start for free</button>
-      </section>
-
-      <section className="site-features">
-        {FEATURES.map((f) => (
-          <div className="feature-card" key={f.title}>
-            <h3>{f.title}</h3>
-            <p>{f.body}</p>
-          </div>
-        ))}
-      </section>
+      {!open && (
+        <main className="support-home">
+          <section className="support-card" aria-labelledby="support-title">
+            <p className="support-card__label">We're here to help</p>
+            <h1 id="support-title">What can we help you with?</h1>
+            <p className="support-card__description">
+              Send our team a message and we’ll help you find an answer.
+            </p>
+            <div className="support-card__availability">
+              <span className={`status-dot ${onlineAgentCount > 0 ? 'online' : ''}`} />
+              <span>
+                {onlineAgentCount > 0
+                  ? `${onlineAgentCount} agent${onlineAgentCount === 1 ? '' : 's'} online`
+                  : "Our team will get back to you soon"}
+              </span>
+            </div>
+            <button className="support-request-button" onClick={() => setOpen(true)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M4 4H20V16H7L4 19V4Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+              </svg>
+              Request support
+            </button>
+          </section>
+        </main>
+      )}
 
       {open && (
         <div className="widget-window">
@@ -124,24 +121,6 @@ export default function ClientWidget() {
         </div>
       )}
 
-      {!open && (
-        <div className="support-callout">
-          <div className="support-callout__bubble">
-            <span className={`status-dot ${onlineAgentCount > 0 ? 'online' : ''}`} />
-            <span>
-              {onlineAgentCount > 0
-                ? `${onlineAgentCount} agent${onlineAgentCount === 1 ? '' : 's'} online now`
-                : "We'll get back to you soon"}
-            </span>
-          </div>
-          <button className="widget-launcher" onClick={() => setOpen(true)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M4 4H20V16H7L4 19V4Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-            </svg>
-            Request support
-          </button>
-        </div>
-      )}
     </div>
   )
 }
