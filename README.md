@@ -70,7 +70,7 @@ Messages are saved before they are broadcast, so the displayed conversation stay
 - Conversation-specific client tokens for visitor access
 - Agent-only REST endpoints and WebSocket access protected by `AGENT_TOKEN`
 - Alembic migrations, including a test that checks migration/model consistency
-- Backend tests plus frontend linting, tests, and production build in CI
+- Backend tests that run against SQLite and PostgreSQL, plus frontend linting, tests, and production build, in CI
 
 ### Authentication note
 
@@ -152,6 +152,8 @@ Install dependencies, apply the database migration, and start the API:
 pip install -r requirements.txt
 ```
 
+Dependency versions in `requirements.txt` are pinned on purpose: an unpinned SQLAlchemy once changed its default PostgreSQL driver between minor versions. Bump them deliberately and run the tests.
+
 ```bash
 alembic upgrade head
 uvicorn app.main:app --reload
@@ -219,11 +221,20 @@ npm test
 npm run build
 ```
 
+## Deployment
+
+The backend and the frontend deploy separately.
+
+**Backend (Render).** Create a new Blueprint from the repository. `render.yaml` provisions a PostgreSQL database and a web service whose start command runs `alembic upgrade head` before the server. Render generates `AGENT_TOKEN` (read it from the service's Environment tab; it is the token used to sign in to the agent dashboard) and sets `DATABASE_URL` from the database. Once the frontend is deployed, set `CORS_ORIGINS` on the web service to the frontend's URL, since the API only accepts the origins listed there.
+
+**Frontend (Vercel or Netlify).** Deploy the `frontend` directory and set `VITE_API_BASE` to the backend's public URL. `vercel.json` and `public/_redirects` send every route to `index.html`, so `/widget` survives a page refresh.
+
+Any other host works with the same four backend variables from the table above, running `alembic upgrade head` before starting `uvicorn`.
+
 ## Roadmap
 
 - Add individual agent identities and authentication
 - Add rate limiting for message sends
-- Support closing and reopening conversations from the interface
 - Add push notifications when agents are offline
 
 ## Author
