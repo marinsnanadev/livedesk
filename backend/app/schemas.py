@@ -38,10 +38,13 @@ class ConversationOut(BaseModel):
     priority: str
     assigned_to: str | None
     created_at: datetime
+    last_message_at: datetime | None = None
+    last_message_preview: str | None = None
+    last_sender_role: str | None = None
 
-    @field_serializer("created_at")
-    def _serialize_created_at(self, value: datetime) -> str:
-        return _as_utc_isoformat(value)
+    @field_serializer("created_at", "last_message_at")
+    def _serialize_timestamps(self, value: datetime | None) -> str | None:
+        return _as_utc_isoformat(value) if value else None
 
 
 class ConversationCreated(ConversationOut):

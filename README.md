@@ -62,6 +62,8 @@ Messages are saved before they are broadcast, so the displayed conversation stay
 - Presence snapshot for agents: a dashboard that connects or reconnects starts from who is online right now, and a visitor with several tabs stays online until the last one closes
 - Live online-agent count on the visitor page
 - Conversation status (`open`, `in_progress`, or `resolved`)
+- A conversation becomes a ticket on the visitor's first message, so visitors who only open the chat never clutter the queue; the list is ordered by latest activity and shows a preview of the last message
+- A customer replying on a resolved ticket reopens it for every connected agent; an agent's reply never does
 - Conversation priority (`low`, `medium`, `high`, or `urgent`)
 - Assignment field and live ticket updates for connected agents
 - WebSocket reconnection with exponential backoff
@@ -85,7 +87,7 @@ Interactive API documentation is available at `/docs` while the backend is runni
 | GET | `/api/health` | Health check | Public |
 | GET | `/api/agents/online-count` | Number of connected agents | Public |
 | POST | `/api/conversations` | Creates a conversation and returns its client token | Public |
-| GET | `/api/conversations` | Lists conversations | `X-Agent-Token` header |
+| GET | `/api/conversations` | Lists tickets (conversations with at least one message), most recent activity first, with a last-message preview | `X-Agent-Token` header |
 | GET | `/api/conversations/{conversation_id}/messages` | Returns conversation history | `X-Agent-Token` or matching `X-Client-Token` header |
 | PATCH | `/api/conversations/{conversation_id}` | Updates status, priority, or assignment | `X-Agent-Token` header |
 

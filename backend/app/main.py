@@ -2,9 +2,11 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+from dataclasses import dataclass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -68,8 +70,34 @@ def online_agent_count():
     dependencies=[Depends(require_agent_token)],
 )
 def list_conversations(db: Session = Depends(get_db)):
-    convos = db.query(models.Conversation).order_by(models.Conversation.created_at.desc()).all()
-    return convos
+    # A conversation only becomes a ticket once the visitor has written
+    # something, so the inner join on the latest message also drops the empty
+    # ones left behind by visitors who opened the widget and walked away.
+    latest = db.query(
+        models.Message.conversation_id,
+        models.Message.body,
+        models.Message.sender_role,
+        models.Message.created_at,
+        func.row_number().over(
+            partition_by=models.Message.conversation_id,
+            order_by=(models.Message.created_at.desc(), models.Message.id.desc()),
+        ).label("position"),
+    ).subquery()
+
+    rows = (
+        db.query(models.Conversation, latest.c.body, latest.c.sender_role, latest.c.created_at)
+        .join(latest, and_(latest.c.conversation_id == models.Conversation.id, latest.c.position == 1))
+        .order_by(latest.c.created_at.desc())
+        .all()
+    )
+    return [
+        schemas.ConversationOut.model_validate(convo).model_copy(update={
+            "last_message_at": sent_at,
+            "last_message_preview": body[:80],
+            "last_sender_role": getattr(sender_role, "value", sender_role),
+        })
+        for convo, body, sender_role, sent_at in rows
+    ]
 
 
 @app.post("/api/conversations", response_model=schemas.ConversationCreated)
@@ -129,13 +157,7 @@ async def update_conversation(
 
     # So a second agent looking at the same ticket sees the change live,
     # instead of only finding out on their next full page load.
-    await manager.broadcast(AGENTS_ROOM, {
-        "type": "ticket_updated",
-        "conversation_id": convo.id,
-        "status": convo.status.value,
-        "priority": convo.priority.value,
-        "assigned_to": convo.assigned_to,
-    })
+    await manager.broadcast(AGENTS_ROOM, ticket_event(convo))
 
     return convo
 
@@ -149,14 +171,35 @@ async def reject(websocket: WebSocket, code: int) -> None:
     await websocket.close(code=code)
 
 
+def ticket_event(convo: models.Conversation) -> dict:
+    return {
+        "type": "ticket_updated",
+        "conversation_id": convo.id,
+        "status": convo.status.value,
+        "priority": convo.priority.value,
+        "assigned_to": convo.assigned_to,
+    }
+
+
 def find_client_token(conversation_id: str) -> str | None:
     with SessionLocal() as db:
         convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
         return convo.client_token if convo else None
 
 
-def save_message(conversation_id: str, role: str, name: str, body: str) -> dict:
+@dataclass
+class SavedMessage:
+    payload: dict
+    client_name: str
+    is_first: bool
+    reopened: dict | None  # the ticket_updated event, if this message reopened the ticket
+
+
+def save_message(conversation_id: str, role: str, name: str, body: str) -> SavedMessage:
     with SessionLocal() as db:
+        convo = db.query(models.Conversation).filter_by(id=conversation_id).first()
+        is_first = db.query(models.Message.id).filter_by(conversation_id=conversation_id).first() is None
+
         msg = models.Message(
             conversation_id=conversation_id,
             sender_role=role,
@@ -164,17 +207,31 @@ def save_message(conversation_id: str, role: str, name: str, body: str) -> dict:
             body=body[:4000],
         )
         db.add(msg)
+
+        # The customer writing back means the issue isn't solved after all.
+        reopens = role == "client" and convo.status == models.ConversationStatus.resolved
+        if reopens:
+            convo.status = models.ConversationStatus.open
+
         db.commit()
         db.refresh(msg)
-        return {
-            "type": "message",
-            "id": msg.id,
-            "conversation_id": conversation_id,
-            "sender_role": role,
-            "sender_name": name,
-            "body": msg.body,
-            "created_at": _as_utc_isoformat(msg.created_at),
-        }
+        if reopens:
+            db.refresh(convo)
+
+        return SavedMessage(
+            payload={
+                "type": "message",
+                "id": msg.id,
+                "conversation_id": conversation_id,
+                "sender_role": role,
+                "sender_name": name,
+                "body": msg.body,
+                "created_at": _as_utc_isoformat(msg.created_at),
+            },
+            client_name=convo.client_name,
+            is_first=is_first,
+            reopened=ticket_event(convo) if reopens else None,
+        )
 
 
 # ---------- WebSocket: the live layer ----------
@@ -236,14 +293,6 @@ async def conversation_room(
 
     await manager.connect(websocket, conversation_id, role=role, name=name)
 
-    # Tell the agents feed a new conversation/client showed up (for the sidebar).
-    if role == "client":
-        await manager.broadcast(AGENTS_ROOM, {
-            "type": "new_activity",
-            "conversation_id": conversation_id,
-            "client_name": name,
-        })
-
     try:
         while True:
             raw = await websocket.receive_text()
@@ -270,14 +319,26 @@ async def conversation_room(
                     await websocket.send_text(json.dumps({"type": "error", "detail": "message body is required"}))
                     continue
 
-                payload = save_message(conversation_id, role, name, body)
+                saved = save_message(conversation_id, role, name, body)
+                payload = saved.payload
                 await manager.broadcast(conversation_id, payload)
+
+                # Opening the widget isn't a ticket; the first message is.
+                if saved.is_first:
+                    await manager.broadcast(AGENTS_ROOM, {
+                        "type": "new_activity",
+                        "conversation_id": conversation_id,
+                        "client_name": saved.client_name,
+                    })
                 await manager.broadcast(AGENTS_ROOM, {
                     "type": "new_message",
                     "conversation_id": conversation_id,
                     "preview": payload["body"][:80],
                     "sender_role": role,
+                    "created_at": payload["created_at"],
                 })
+                if saved.reopened:
+                    await manager.broadcast(AGENTS_ROOM, saved.reopened)
 
             elif event_type == "typing":
                 # Never persisted — pure live signal.

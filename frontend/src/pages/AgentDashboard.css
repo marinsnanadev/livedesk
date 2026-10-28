@@ -129,6 +129,14 @@
   white-space: nowrap;
 }
 
+.convo-row__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .convo-row__badge {
   background: var(--attention);
   color: #1a1206;

@@ -28,6 +28,15 @@ def _create_conversation(name="Test Visitor"):
     return _new_conversation(name)["id"]
 
 
+def _create_ticket(name="Test Visitor"):
+    # A conversation only shows up in the agents' list once it has a message.
+    convo = _new_conversation(name)
+    with client.websocket_connect(_client_url(convo, "Opener")) as ws:
+        ws.send_json({"type": "message", "body": "hello"})
+        ws.receive_json()
+    return convo["id"]
+
+
 def _client_url(convo, name="Tester"):
     return f"/ws/conversations/{convo['id']}?role=client&name={name}&token={convo['client_token']}"
 
@@ -83,7 +92,7 @@ def test_online_agent_count_does_not_double_count_the_same_agent():
 
 
 def test_create_and_list_conversation():
-    convo_id = _create_conversation()
+    convo_id = _create_ticket()
     resp = client.get("/api/conversations", headers=AGENT_HEADERS)
     assert resp.status_code == 200
     assert any(c["id"] == convo_id for c in resp.json())
@@ -129,7 +138,7 @@ def test_typing_event_is_not_persisted():
 
 
 def test_new_conversation_has_ticket_defaults():
-    convo_id = _create_conversation("Default Ticket")
+    convo_id = _create_ticket("Default Ticket")
     convo = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
     assert convo["status"] == "open"
     assert convo["priority"] == "medium"
@@ -137,7 +146,7 @@ def test_new_conversation_has_ticket_defaults():
 
 
 def test_update_ticket_persists_across_requests():
-    convo_id = _create_conversation("Persisted Ticket")
+    convo_id = _create_ticket("Persisted Ticket")
 
     resp = client.patch(
         f"/api/conversations/{convo_id}",
@@ -160,7 +169,7 @@ def test_update_ticket_persists_across_requests():
 
 
 def test_update_ticket_rejects_invalid_status():
-    convo_id = _create_conversation("Bad Status")
+    convo_id = _create_ticket("Bad Status")
     resp = client.patch(f"/api/conversations/{convo_id}", json={"status": "not_a_real_status"}, headers=AGENT_HEADERS)
     assert resp.status_code == 422
 
@@ -188,7 +197,7 @@ def test_update_conversation_404_for_unknown_id():
 
 
 def test_update_conversation_rejects_missing_agent_token():
-    convo_id = _create_conversation("Unauthorized Patch")
+    convo_id = _create_ticket("Unauthorized Patch")
     resp = client.patch(f"/api/conversations/{convo_id}", json={"priority": "urgent"})
     assert resp.status_code == 401
 
@@ -297,13 +306,14 @@ def test_timestamps_are_serialized_as_explicit_utc():
     convo = _new_conversation("Timezone Tester")
     convo_id = convo["id"]
 
-    listed = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
-    assert listed["created_at"].endswith("+00:00") or listed["created_at"].endswith("Z")
-
     with client.websocket_connect(_client_url(convo, "Timezone")) as ws:
         ws.send_json({"type": "message", "body": "checking timestamps"})
         event = ws.receive_json()
         assert event["created_at"].endswith("+00:00") or event["created_at"].endswith("Z")
+
+    listed = next(c for c in client.get("/api/conversations", headers=AGENT_HEADERS).json() if c["id"] == convo_id)
+    assert listed["created_at"].endswith("+00:00") or listed["created_at"].endswith("Z")
+    assert listed["last_message_at"].endswith("+00:00") or listed["last_message_at"].endswith("Z")
 
     history = client.get(f"/api/conversations/{convo_id}/messages", headers=AGENT_HEADERS).json()
     assert history[0]["created_at"].endswith("+00:00") or history[0]["created_at"].endswith("Z")

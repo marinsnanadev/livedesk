@@ -5,6 +5,7 @@ import ChatPanel from '../components/ChatPanel'
 import TicketDetailPanel from '../components/TicketDetailPanel'
 import AgentLogin from '../components/AgentLogin'
 import { shouldClaimOnOpen } from '../ticketRules'
+import { mergeConversations, sortByActivity, withNewMessage } from '../conversationList'
 import './AgentDashboard.css'
 
 const TOKEN_KEY = 'livedesk_agent_token'
@@ -62,15 +63,19 @@ export default function AgentDashboard() {
     setAgentToken('')
   }, [])
 
-  useEffect(() => {
-    if (!agentToken || !agentName) return
+  const loadConversations = useCallback(() => {
     listConversations(agentToken)
-      .then(setConversations)
+      .then((list) => setConversations((current) => mergeConversations(list, current)))
       .catch((err) => {
         if (err.message === 'unauthorized') rejectToken()
         else setNotice(LOAD_FAILED_MESSAGE)
       })
-  }, [agentToken, agentName, rejectToken])
+  }, [agentToken, rejectToken])
+
+  useEffect(() => {
+    if (!agentToken || !agentName) return
+    loadConversations()
+  }, [agentToken, agentName, loadConversations])
 
   useEffect(() => {
     if (!agentToken || !agentName) return
@@ -96,6 +101,8 @@ export default function AgentDashboard() {
           return
         }
         attempt = 0
+        // Tickets created while the feed was down never came through it.
+        loadConversations()
       }
 
       ws.onclose = (evt) => {
@@ -155,6 +162,7 @@ export default function AgentDashboard() {
         }
 
         if (event.type === 'new_message') {
+          setConversations((prev) => withNewMessage(prev, event))
           setUnread((prev) => {
             if (event.conversation_id === activeIdRef.current) return prev
             return { ...prev, [event.conversation_id]: (prev[event.conversation_id] || 0) + 1 }
@@ -183,7 +191,7 @@ export default function AgentDashboard() {
       clearTimeout(reconnectTimer)
       ws?.close()
     }
-  }, [agentToken, agentName, rejectToken])
+  }, [agentToken, agentName, rejectToken, loadConversations])
 
   // The UI only changes when the ticket_updated event comes back, so a failed
   // request would otherwise look like nothing happened at all.
@@ -209,7 +217,7 @@ export default function AgentDashboard() {
   const updateTicket = (id, patch) => saveTicket(id, patch, "Couldn't save that change. Try again.")
 
   const activeConvo = conversations.find((c) => c.id === activeId)
-  const visibleConversations = conversations.filter((c) => matchesFilter(c, filter))
+  const visibleConversations = sortByActivity(conversations.filter((c) => matchesFilter(c, filter)))
 
   const openCount = conversations.filter((c) => c.status !== 'resolved').length
   const unassignedCount = conversations.filter((c) => !c.assigned_to).length
@@ -267,6 +275,9 @@ export default function AgentDashboard() {
               <span className={`status-dot ${presence[c.id] === 'online' ? 'online' : ''}`} />
               <span className="convo-row__body">
                 <span className="convo-row__name">{c.client_name}</span>
+                {c.last_message_preview && (
+                  <span className="convo-row__preview">{c.last_message_preview}</span>
+                )}
                 <span className={`priority-pill priority-pill--${c.priority}`}>{c.priority}</span>
               </span>
               {unread[c.id] > 0 && <span className="convo-row__badge">{unread[c.id]}</span>}

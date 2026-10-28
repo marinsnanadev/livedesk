@@ -24,6 +24,8 @@ in the run fails with "attempt to write a readonly database".
 import os
 import sys
 
+import pytest
+
 TEST_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "test_livedesk.db")
 
 if os.path.exists(TEST_DB_PATH):
@@ -43,3 +45,15 @@ from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 
 command.upgrade(Config(os.path.join(BACKEND_DIR, "alembic.ini")), "head")
+
+
+@pytest.fixture
+def client():
+    # Entering the TestClient runs every connection on one event loop, like
+    # uvicorn does. Without it each websocket gets its own loop and thread,
+    # and tests that wait on events crossing between sockets hang at random.
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    with TestClient(app) as test_client:
+        yield test_client
