@@ -3,9 +3,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 15% 0%, rgba(79, 209, 197, 0.10), transparent 45%),
-    var(--bg);
+  background: radial-gradient(circle at 15% 0%, rgba(79, 209, 197, 0.1), transparent 45%), var(--bg);
 }
 
 .widget-header {
@@ -86,7 +84,9 @@
   border-radius: var(--radius-md);
   font-weight: 700;
   font-size: 16px;
-  transition: background-color 140ms ease, transform 140ms ease;
+  transition:
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
 .support-request-button:hover {

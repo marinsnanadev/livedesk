@@ -18,9 +18,8 @@ export default function AgentLogin({ onSubmit, error, initialName = '' }) {
         <span className="agent-login__eyebrow mono">LIVEDESK // AGENT</span>
         <h1>Sign in as an agent</h1>
         <p className="agent-login__hint">
-          Your name is what customers see on your replies. The token is{' '}
-          <code>AGENT_TOKEN</code> from the backend's <code>.env</code>
-          (see <code>backend/.env.example</code>).
+          Your name is what customers see on your replies. The token is <code>AGENT_TOKEN</code> from the
+          backend's <code>.env</code> (see <code>backend/.env.example</code>).
         </p>
         <input
           className="agent-login__input"

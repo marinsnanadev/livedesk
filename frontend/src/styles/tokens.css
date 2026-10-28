@@ -17,14 +17,14 @@
   --text-muted: #8ca0a8;
   --text-faint: #56666c;
 
-  --signal: #4fd1c5;      /* connected / online / sent by you */
+  --signal: #4fd1c5; /* connected / online / sent by you */
   --signal-dim: #2e6b64;
-  --attention: #f2b84b;   /* typing / unread */
+  --attention: #f2b84b; /* typing / unread */
   --danger: #e2685c;
 
-  --font-display: "Space Grotesk", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   --radius-sm: 6px;
   --radius-md: 10px;

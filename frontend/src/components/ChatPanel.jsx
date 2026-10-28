@@ -77,14 +77,9 @@ export default function ChatPanel({ conversationId, role, name, token, placehold
       </div>
 
       <div className="chat-panel__messages scrollbar-thin" ref={scrollRef}>
-        {messages.length === 0 && (
-          <p className="chat-panel__empty">No messages yet. Say hi.</p>
-        )}
+        {messages.length === 0 && <p className="chat-panel__empty">No messages yet. Say hi.</p>}
         {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`bubble ${m.sender_role === role ? 'bubble--mine' : 'bubble--theirs'}`}
-          >
+          <div key={m.id} className={`bubble ${m.sender_role === role ? 'bubble--mine' : 'bubble--theirs'}`}>
             <span className="bubble__meta mono">{m.sender_name}</span>
             <p>{m.body}</p>
           </div>

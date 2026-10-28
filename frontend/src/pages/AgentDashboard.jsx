@@ -91,7 +91,7 @@ export default function AgentDashboard() {
     const connect = () => {
       if (cancelled) return
       ws = new WebSocket(
-        `${WS_BASE}/ws/agents?name=${encodeURIComponent(agentName)}&token=${encodeURIComponent(agentToken)}`
+        `${WS_BASE}/ws/agents?name=${encodeURIComponent(agentName)}&token=${encodeURIComponent(agentToken)}`,
       )
       wsRef.current = ws
 
@@ -177,8 +177,8 @@ export default function AgentDashboard() {
             prev.map((c) =>
               c.id === event.conversation_id
                 ? { ...c, status: event.status, priority: event.priority, assigned_to: event.assigned_to }
-                : c
-            )
+                : c,
+            ),
           )
         }
       }
@@ -263,9 +263,7 @@ export default function AgentDashboard() {
         </div>
 
         <div className="dashboard__list scrollbar-thin">
-          {visibleConversations.length === 0 && (
-            <p className="dashboard__empty">No tickets here.</p>
-          )}
+          {visibleConversations.length === 0 && <p className="dashboard__empty">No tickets here.</p>}
           {visibleConversations.map((c) => (
             <button
               key={c.id}
@@ -290,7 +288,9 @@ export default function AgentDashboard() {
         {notice && (
           <div className="dashboard__notice" role="alert">
             <span>{notice}</span>
-            <button onClick={() => setNotice('')} aria-label="Dismiss">✕</button>
+            <button onClick={() => setNotice('')} aria-label="Dismiss">
+              ✕
+            </button>
           </div>
         )}
         {activeConvo ? (

@@ -54,9 +54,20 @@
   font-family: var(--font-body);
 }
 
-.ticket-panel__select--status-open { border-color: var(--signal-dim); }
-.ticket-panel__select--status-in_progress { border-color: var(--attention); }
-.ticket-panel__select--status-resolved { border-color: var(--text-faint); color: var(--text-muted); }
+.ticket-panel__select--status-open {
+  border-color: var(--signal-dim);
+}
+.ticket-panel__select--status-in_progress {
+  border-color: var(--attention);
+}
+.ticket-panel__select--status-resolved {
+  border-color: var(--text-faint);
+  color: var(--text-muted);
+}
 
-.ticket-panel__select--priority-urgent { border-color: var(--danger); }
-.ticket-panel__select--priority-high { border-color: var(--attention); }
+.ticket-panel__select--priority-urgent {
+  border-color: var(--danger);
+}
+.ticket-panel__select--priority-high {
+  border-color: var(--attention);
+}

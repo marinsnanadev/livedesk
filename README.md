@@ -70,7 +70,7 @@ Messages are saved before they are broadcast, so the displayed conversation stay
 - Conversation-specific client tokens for visitor access
 - Agent-only REST endpoints and WebSocket access protected by `AGENT_TOKEN`
 - Alembic migrations, including a test that checks migration/model consistency
-- Backend tests that run against SQLite and PostgreSQL, plus frontend linting, tests, and production build, in CI
+- Backend tests that run against SQLite and PostgreSQL, plus frontend linting, a formatting check, tests, and production build, in CI
 
 ### Authentication note
 
@@ -217,6 +217,7 @@ From the `frontend` directory:
 
 ```bash
 npm run lint
+npm run format:check
 npm test
 npm run build
 ```

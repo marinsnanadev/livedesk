@@ -22,6 +22,6 @@ export function withNewMessage(conversations, event) {
           last_message_preview: event.preview,
           last_sender_role: event.sender_role,
         }
-      : c
+      : c,
   )
 }

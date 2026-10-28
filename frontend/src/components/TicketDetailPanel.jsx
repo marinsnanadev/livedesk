@@ -23,7 +23,9 @@ export default function TicketDetailPanel({ conversation, openedLabel, onChange 
       </div>
 
       <div className="ticket-panel__section">
-        <label className="ticket-panel__label" htmlFor="ticket-status">Status</label>
+        <label className="ticket-panel__label" htmlFor="ticket-status">
+          Status
+        </label>
         <select
           id="ticket-status"
           className={`ticket-panel__select ticket-panel__select--status-${conversation.status}`}
@@ -31,13 +33,17 @@ export default function TicketDetailPanel({ conversation, openedLabel, onChange 
           onChange={(e) => onChange({ status: e.target.value })}
         >
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
           ))}
         </select>
       </div>
 
       <div className="ticket-panel__section">
-        <label className="ticket-panel__label" htmlFor="ticket-priority">Priority</label>
+        <label className="ticket-panel__label" htmlFor="ticket-priority">
+          Priority
+        </label>
         <select
           id="ticket-priority"
           className={`ticket-panel__select ticket-panel__select--priority-${conversation.priority}`}
@@ -45,7 +51,9 @@ export default function TicketDetailPanel({ conversation, openedLabel, onChange 
           onChange={(e) => onChange({ priority: e.target.value })}
         >
           {PRIORITY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
           ))}
         </select>
       </div>
