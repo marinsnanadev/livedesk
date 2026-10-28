@@ -173,6 +173,7 @@ def test_update_ticket_broadcasts_to_agents_feed():
     convo_id = _create_conversation("Broadcast Ticket")
 
     with client.websocket_connect(f"/ws/agents?name=Watcher&token={AGENT_TOKEN}") as agents_ws:
+        assert agents_ws.receive_json()["type"] == "presence_snapshot"
         client.patch(f"/api/conversations/{convo_id}", json={"priority": "high"}, headers=AGENT_HEADERS)
         event = agents_ws.receive_json()
 

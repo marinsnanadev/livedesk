@@ -31,7 +31,7 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket, room_id: str, role: str, name: str) -> None:
         await websocket.accept()
         self.rooms.setdefault(room_id, set()).add(websocket)
-        self.meta[websocket] = {"room_id": room_id, "role": role, "name": name}
+        self.meta[websocket] = {"room_id": room_id, "role": role, "name": name, "typing": False}
 
         if role == "agent":
             self.rooms.setdefault(AGENTS_ROOM, set()).add(websocket)
@@ -45,10 +45,14 @@ class ConnectionManager:
                 "name": name,
             })
 
-    def disconnect(self, websocket: WebSocket) -> dict | None:
+    async def disconnect(self, websocket: WebSocket) -> None:
+        # Whoever notices a socket is gone first (its own handler, or a
+        # broadcast that failed to reach it) lands here, so the "left"
+        # announcements live here too. Otherwise a socket dropped by a failed
+        # broadcast would never tell the agents the client went offline.
         info = self.meta.pop(websocket, None)
         if not info:
-            return None
+            return
 
         room = self.rooms.get(info["room_id"])
         if room:
@@ -60,7 +64,34 @@ class ConnectionManager:
         if agents_room:
             agents_room.discard(websocket)
 
-        return info
+        if info["typing"]:
+            await self.broadcast(info["room_id"], {
+                "type": "typing",
+                "conversation_id": info["room_id"],
+                "sender_role": info["role"],
+                "sender_name": info["name"],
+                "is_typing": False,
+            })
+
+        # A visitor can have several tabs open: only the last one leaving
+        # makes them offline.
+        if info["role"] == "client" and not self.client_online(info["room_id"]):
+            await self.broadcast(AGENTS_ROOM, {
+                "type": "presence",
+                "conversation_id": info["room_id"],
+                "status": "offline",
+                "name": info["name"],
+            })
+
+    def set_typing(self, websocket: WebSocket, is_typing: bool) -> None:
+        if websocket in self.meta:
+            self.meta[websocket]["typing"] = is_typing
+
+    def client_online(self, room_id: str) -> bool:
+        return any(self.meta[ws]["role"] == "client" for ws in self.rooms.get(room_id, ()))
+
+    def online_conversations(self) -> list[str]:
+        return [room_id for room_id in self.rooms if room_id != AGENTS_ROOM and self.client_online(room_id)]
 
     async def broadcast(self, room_id: str, payload: dict, exclude: WebSocket | None = None) -> None:
         sockets = list(self.rooms.get(room_id, set()))
@@ -73,7 +104,7 @@ class ConnectionManager:
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            self.disconnect(ws)
+            await self.disconnect(ws)
 
     def online_agent_count(self) -> int:
         # Count distinct agent *names*, not sockets: one agent has two

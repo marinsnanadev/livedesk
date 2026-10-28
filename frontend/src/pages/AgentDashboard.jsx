@@ -118,6 +118,11 @@ export default function AgentDashboard() {
         if (cancelled) return
         const event = JSON.parse(evt.data)
 
+        if (event.type === 'presence_snapshot') {
+          // Replaces everything: after a reconnect the old entries may be stale.
+          setPresence(Object.fromEntries(event.online.map((id) => [id, 'online'])))
+        }
+
         if (event.type === 'presence') {
           setPresence((prev) => ({ ...prev, [event.conversation_id]: event.status }))
         }

@@ -59,6 +59,7 @@ Messages are saved before they are broadcast, so the displayed conversation stay
 - Agent dashboard with a live conversation list
 - Persistent conversation and message history
 - Real-time messages, typing indicators, and client/agent presence
+- Presence snapshot for agents: a dashboard that connects or reconnects starts from who is online right now, and a visitor with several tabs stays online until the last one closes
 - Live online-agent count on the visitor page
 - Conversation status (`open`, `in_progress`, or `resolved`)
 - Conversation priority (`low`, `medium`, `high`, or `urgent`)

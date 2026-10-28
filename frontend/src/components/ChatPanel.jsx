@@ -28,6 +28,12 @@ export default function ChatPanel({ conversationId, role, name, token, placehold
     onMessage: handleIncoming,
     onRejected,
   })
+
+  // If our own connection drops we stop hearing the other side, so a
+  // "typing…" shown before the drop could never be cleared.
+  useEffect(() => {
+    if (!connected) setPeerTyping(false)
+  }, [connected])
   const { notifyTyping, notifyStopped } = useTypingSignal(send)
 
   const loadHistory = useCallback(() => {

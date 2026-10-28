@@ -195,10 +195,18 @@ async def agents_feed(websocket: WebSocket, name: str = "Agent", token: str = ""
 
     await manager.connect(websocket, AGENTS_ROOM, role="agent", name=name)
     try:
+        # Presence events only describe changes, so a dashboard that connects
+        # (or reconnects) later needs the current state to start from.
+        await websocket.send_text(json.dumps({
+            "type": "presence_snapshot",
+            "online": manager.online_conversations(),
+        }))
         while True:
             await websocket.receive_text()  # agents feed is read-only from client side
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        pass
+    finally:
+        await manager.disconnect(websocket)
 
 
 @app.websocket("/ws/conversations/{conversation_id}")
@@ -273,20 +281,17 @@ async def conversation_room(
 
             elif event_type == "typing":
                 # Never persisted — pure live signal.
+                is_typing = bool(event.get("is_typing"))
+                manager.set_typing(websocket, is_typing)
                 await manager.broadcast(conversation_id, {
                     "type": "typing",
                     "conversation_id": conversation_id,
                     "sender_role": role,
                     "sender_name": name,
-                    "is_typing": bool(event.get("is_typing")),
+                    "is_typing": is_typing,
                 }, exclude=websocket)
 
     except WebSocketDisconnect:
-        info = manager.disconnect(websocket)
-        if info and info["role"] == "client":
-            await manager.broadcast(AGENTS_ROOM, {
-                "type": "presence",
-                "conversation_id": conversation_id,
-                "status": "offline",
-                "name": name,
-            })
+        pass
+    finally:
+        await manager.disconnect(websocket)
