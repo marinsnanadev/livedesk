@@ -14,6 +14,8 @@ export default function ClientWidget() {
   const [conversationId, setConversationId] = useState(sessionStorage.getItem(CONVO_KEY))
   const [clientToken, setClientToken] = useState(sessionStorage.getItem(CLIENT_TOKEN_KEY))
   const [onlineAgentCount, setOnlineAgentCount] = useState(null)
+  const [startFailed, setStartFailed] = useState(false)
+  const [startAttempt, setStartAttempt] = useState(0)
   const recoveredRef = useRef(false)
   const [name] = useState(() => {
     const existing = sessionStorage.getItem(NAME_KEY)
@@ -25,13 +27,20 @@ export default function ClientWidget() {
 
   useEffect(() => {
     if (!open || (conversationId && clientToken)) return
-    createConversation(name).then((c) => {
-      setConversationId(c.id)
-      setClientToken(c.client_token)
-      sessionStorage.setItem(CONVO_KEY, c.id)
-      sessionStorage.setItem(CLIENT_TOKEN_KEY, c.client_token)
-    })
-  }, [open, conversationId, clientToken, name])
+    createConversation(name)
+      .then((c) => {
+        setConversationId(c.id)
+        setClientToken(c.client_token)
+        sessionStorage.setItem(CONVO_KEY, c.id)
+        sessionStorage.setItem(CLIENT_TOKEN_KEY, c.client_token)
+      })
+      .catch(() => setStartFailed(true))
+  }, [open, conversationId, clientToken, name, startAttempt])
+
+  const retryStart = () => {
+    setStartFailed(false)
+    setStartAttempt((n) => n + 1)
+  }
 
   useEffect(() => {
     // Was a hardcoded "3 agents online now" regardless of whether anyone
@@ -114,6 +123,11 @@ export default function ClientWidget() {
                 placeholder="How can we help?"
                 onRejected={handleRejected}
               />
+            ) : startFailed ? (
+              <div className="widget-window__error" role="alert">
+                <p>We couldn't start the chat.</p>
+                <button onClick={retryStart}>Try again</button>
+              </div>
             ) : (
               <p className="widget-window__loading">Connecting…</p>
             )}

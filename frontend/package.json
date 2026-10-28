@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "node --test src/closeCodes.test.js src/mergeMessages.test.js",
+    "test": "node --test src/closeCodes.test.js src/mergeMessages.test.js src/ticketRules.test.js",
     "format": "prettier --write ."
   },
   "dependencies": {

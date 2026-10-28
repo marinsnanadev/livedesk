@@ -4,11 +4,13 @@ import { CLOSE_UNAUTHORIZED } from '../closeCodes'
 import ChatPanel from '../components/ChatPanel'
 import TicketDetailPanel from '../components/TicketDetailPanel'
 import AgentLogin from '../components/AgentLogin'
+import { shouldClaimOnOpen } from '../ticketRules'
 import './AgentDashboard.css'
 
-const AGENT_NAME = 'Amy'
 const TOKEN_KEY = 'livedesk_agent_token'
+const NAME_KEY = 'livedesk_agent_name'
 const REJECTED_TOKEN_MESSAGE = 'That token was rejected. Check AGENT_TOKEN in the backend and try again.'
+const LOAD_FAILED_MESSAGE = "Couldn't load the tickets. Is the backend running?"
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -34,7 +36,9 @@ function relativeTime(isoString) {
 
 export default function AgentDashboard() {
   const [agentToken, setAgentToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) || '')
+  const [agentName, setAgentName] = useState(() => sessionStorage.getItem(NAME_KEY) || '')
   const [authError, setAuthError] = useState('')
+  const [notice, setNotice] = useState('')
   const [conversations, setConversations] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [presence, setPresence] = useState({}) // conversation_id -> 'online' | 'offline'
@@ -44,9 +48,11 @@ export default function AgentDashboard() {
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
 
-  const handleLogin = (token) => {
+  const handleLogin = ({ name, token }) => {
     sessionStorage.setItem(TOKEN_KEY, token)
+    sessionStorage.setItem(NAME_KEY, name)
     setAuthError('')
+    setAgentName(name)
     setAgentToken(token)
   }
 
@@ -57,16 +63,17 @@ export default function AgentDashboard() {
   }, [])
 
   useEffect(() => {
-    if (!agentToken) return
+    if (!agentToken || !agentName) return
     listConversations(agentToken)
       .then(setConversations)
       .catch((err) => {
         if (err.message === 'unauthorized') rejectToken()
+        else setNotice(LOAD_FAILED_MESSAGE)
       })
-  }, [agentToken, rejectToken])
+  }, [agentToken, agentName, rejectToken])
 
   useEffect(() => {
-    if (!agentToken) return
+    if (!agentToken || !agentName) return
 
     // Guarded against React StrictMode's dev-only double-mount: closing a
     // socket mid-handshake doesn't stop it from connecting, so without this
@@ -79,7 +86,7 @@ export default function AgentDashboard() {
     const connect = () => {
       if (cancelled) return
       ws = new WebSocket(
-        `${WS_BASE}/ws/agents?name=${encodeURIComponent(AGENT_NAME)}&token=${encodeURIComponent(agentToken)}`
+        `${WS_BASE}/ws/agents?name=${encodeURIComponent(agentName)}&token=${encodeURIComponent(agentToken)}`
       )
       wsRef.current = ws
 
@@ -176,23 +183,30 @@ export default function AgentDashboard() {
       clearTimeout(reconnectTimer)
       ws?.close()
     }
-  }, [agentToken, rejectToken])
+  }, [agentToken, agentName, rejectToken])
+
+  // The UI only changes when the ticket_updated event comes back, so a failed
+  // request would otherwise look like nothing happened at all.
+  const saveTicket = (id, patch, failureMessage) =>
+    updateConversation(id, patch, agentToken)
+      .then(() => setNotice(''))
+      .catch((err) => {
+        if (err.message === 'unauthorized') rejectToken()
+        else setNotice(failureMessage)
+      })
 
   const openConversation = (id) => {
     setActiveId(id)
     setUnread((prev) => ({ ...prev, [id]: 0 }))
-    // Opening an unassigned ticket claims it — mirrors how a real agent
-    // "picks up" a ticket from the queue. Persisted on the backend; the
-    // UI updates when the resulting ticket_updated event comes back.
+    // Opening an unassigned ticket from the queue claims it, like an agent
+    // picking it up. Persisted on the backend.
     const convo = conversations.find((c) => c.id === id)
-    if (convo && !convo.assigned_to) {
-      updateConversation(id, { assigned_to: AGENT_NAME }, agentToken).catch(() => {})
+    if (convo && shouldClaimOnOpen(convo)) {
+      saveTicket(id, { assigned_to: agentName }, "Couldn't assign this ticket to you.")
     }
   }
 
-  const updateTicket = (id, patch) => {
-    updateConversation(id, patch, agentToken).catch(() => {})
-  }
+  const updateTicket = (id, patch) => saveTicket(id, patch, "Couldn't save that change. Try again.")
 
   const activeConvo = conversations.find((c) => c.id === activeId)
   const visibleConversations = conversations.filter((c) => matchesFilter(c, filter))
@@ -201,8 +215,8 @@ export default function AgentDashboard() {
   const unassignedCount = conversations.filter((c) => !c.assigned_to).length
   const urgentCount = conversations.filter((c) => c.priority === 'urgent').length
 
-  if (!agentToken) {
-    return <AgentLogin onSubmit={handleLogin} error={authError} />
+  if (!agentToken || !agentName) {
+    return <AgentLogin onSubmit={handleLogin} error={authError} initialName={agentName} />
   }
 
   return (
@@ -262,12 +276,18 @@ export default function AgentDashboard() {
       </aside>
 
       <main className="dashboard__main">
+        {notice && (
+          <div className="dashboard__notice" role="alert">
+            <span>{notice}</span>
+            <button onClick={() => setNotice('')} aria-label="Dismiss">✕</button>
+          </div>
+        )}
         {activeConvo ? (
           <ChatPanel
             key={activeConvo.id}
             conversationId={activeConvo.id}
             role="agent"
-            name={AGENT_NAME}
+            name={agentName}
             token={agentToken}
             placeholder={`Reply to ${activeConvo.client_name}…`}
             onRejected={(code) => (code === CLOSE_UNAUTHORIZED ? rejectToken() : setActiveId(null))}

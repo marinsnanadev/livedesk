@@ -72,7 +72,7 @@ Messages are saved before they are broadcast, so the displayed conversation stay
 
 ### Authentication note
 
-Agent access currently uses one shared `AGENT_TOKEN`; there are no individual agent accounts or roles. The development default is `dev-only-agent-token` and must not be used in production. When `APP_ENV=production`, the backend refuses to start if the default token is still configured. Visitor access is scoped to a conversation using a `client_token` issued when the conversation is created.
+Agent access currently uses one shared `AGENT_TOKEN`; there are no individual agent accounts or roles. Agents pick a display name when they sign in, but it is not an identity: two agents who choose the same name count as one online agent. The development default is `dev-only-agent-token` and must not be used in production. When `APP_ENV=production`, the backend refuses to start if the default token is still configured. Visitor access is scoped to a conversation using a `client_token` issued when the conversation is created.
 
 ## API
 
@@ -201,7 +201,7 @@ The default API URL is `http://localhost:8000`. Start Vite:
 npm run dev
 ```
 
-Open the agent dashboard at `http://localhost:5173/` and enter the backend's `AGENT_TOKEN`. Open the visitor experience at `http://localhost:5173/widget`. Use both routes in separate tabs to try a conversation.
+Open the agent dashboard at `http://localhost:5173/` and sign in with a display name and the backend's `AGENT_TOKEN`. Open the visitor experience at `http://localhost:5173/widget`. Use both routes in separate tabs to try a conversation.
 
 | Variable | Description | Default |
 |----------|-------------|---------|

@@ -147,3 +147,25 @@
   padding: var(--space-4);
   color: var(--text-faint);
 }
+
+.widget-window__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  color: var(--danger);
+}
+
+.widget-window__error p {
+  margin: 0;
+}
+
+.widget-window__error button {
+  background: var(--signal);
+  color: #06201d;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-weight: 700;
+}
